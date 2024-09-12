@@ -1,10 +1,11 @@
 import math
 import meep as mp
 from meep import mpb
-from matplotlib import pyplot as plt
-from IPython.display import display, HTML
-from ipywidgets import Dropdown, Output, VBox
+import matplotlib.pyplot as plt  # Ensure you have matplotlib imported for plotting
+import sys 
+import contextlib
 import plotly.graph_objects as go
+
 
 class PhotonicCrystal:
     
@@ -16,6 +17,7 @@ class PhotonicCrystal:
                 k_points=None,
                 interp=10,
                 lattice_type=None):
+
         """
         Initialize a PhotonicCrystal object.
 
@@ -31,14 +33,15 @@ class PhotonicCrystal:
         Raises:
         ValueError: If geometry_lattice is None and k_points is not None.
         """
+
         if geometry is None:
             geometry = PhotonicCrystal.basic_geometry()
         if geometry_lattice is None and k_points is not None:
             raise ValueError("Both geometry_lattice and k_points must be None or both not None.")
         elif lattice_type is None or lattice_type == 'square':
-            geometry_lattice, k_points = PhotonicCrystal.square_lattice()
+                geometry_lattice, k_points = PhotonicCrystal.square_lattice()
         elif lattice_type == 'triangular':
-            geometry_lattice, k_points = PhotonicCrystal.triangular_lattice()
+                geometry_lattice, k_points = PhotonicCrystal.triangular_lattice()
 
         self.num_bands = num_bands
         self.resolution = resolution
@@ -62,6 +65,7 @@ class PhotonicCrystal:
             resolution=self.resolution,
             num_bands=self.num_bands
         )
+    
 
     def run_simulation(self, type='both', runner=None, out_file="std_out_red.txt"):
         """
@@ -74,6 +78,7 @@ class PhotonicCrystal:
         """
         with open(out_file, 'w') as f:
             with contextlib.redirect_stdout(f):
+        
                 if runner is None: 
                     if type == 'tm':
                         self.ms.run_tm()
@@ -97,6 +102,9 @@ class PhotonicCrystal:
                     getattr(self.ms, runner)()
                     self.freqs = self.ms.all_freqs
                     self.gaps = self.ms.gap_list
+                
+            
+                
 
     def extract_data(self, periods: int=3):
         """
@@ -106,6 +114,32 @@ class PhotonicCrystal:
         - periods_: The number of periods to extract. Default is 3.
         """
         self.md = mpb.MPBData(rectify=True, periods=periods, resolution=self.resolution)
+
+    def plot_epsilon(self, fig=None, ax=None, title='Epsilon'):
+        """
+        Plot the epsilon values obtained from the simulation.
+        """
+        if self.ms is None:
+            print("Simulation not run yet. Please run the simulation first.")
+            return
+        eps = self.ms.get_epsilon()
+        converted_eps = self.md.convert(eps)
+        
+        if ax is not None:
+            im = ax.imshow(converted_eps, interpolation='spline36', cmap='viridis')
+            ax.axis('off')
+            ax.set_title(title)
+            cbar = fig.colorbar(im, ax=ax)
+            cbar.set_label('$\\epsilon $')
+
+        else:
+            plt.imshow(converted_eps, interpolation='spline36', cmap='viridis')
+            cbar = plt.colorbar()
+            cbar.set_label('$\\epsilon $')
+            plt.axis('off')
+            plt.title(title)
+
+        return converted_eps
 
     def plot_epsilon_interactive(self, fig=None, title='Epsilon'):
         """
@@ -124,6 +158,49 @@ class PhotonicCrystal:
         fig.update_layout(title=title, coloraxis_colorbar=dict(title='$\\epsilon $'))
 
         return fig, converted_eps
+            
+
+
+        
+
+    def plot_bands(self, 
+                   fig=None, 
+                   ax=None, 
+                   polarization="te", 
+                   color= "red",  
+                   title='Bands'):
+        """
+        Plot the band structure of the photonic crystal.
+        """
+        
+        freqs = getattr(self, f'freqs_{polarization}')
+        gaps = getattr(self, f'gaps_{polarization}')
+        if freqs is None:
+            print("Simulation not run yet. Please run the simulation first.")
+            return
+        xs = range(len(freqs))
+        if ax is not None:
+            ax.plot(freqs, color=color)
+
+            for gap in gaps:
+                if gap[0]>1:
+                    ax.fill_between(xs, gap[1], gap[2], color= color, alpha=0.2)
+            
+            for x,freq in zip(xs,freqs):
+                ax.scatter([x]*len(freq), freq, color=color, s=10)
+        
+        
+        
+
+        points_in_between = (len(freqs) - 4) / 3
+        tick_locs = [i*points_in_between+i for i in range(4)]
+        tick_labs = ['Γ', 'X', 'M', 'Γ']
+        ax.set_xticks(tick_locs)
+        ax.set_xticklabels(tick_labs, size=16)
+        ax.set_ylabel('frequency (c/a)', size=16)
+        ax.grid(True)
+        ax.set_xlim(0, len(freqs)-1)
+
 
     def plot_bands_interactive(self, polarization="te", title='Bands', fig=None, color='blue'):
         """
@@ -161,7 +238,11 @@ class PhotonicCrystal:
         )
 
         return fig
+                
 
+        
+
+        
     @staticmethod
     def basic_geometry():
         """
@@ -214,55 +295,55 @@ class PhotonicCrystal:
             mp.Vector3(),               # Gamma
         ]
         return lattice, k_points
+    
+    
+                             
+    
+# Example usage
+#%%
+from photonic_crystal import PhotonicCrystal
+import math
+import meep as mp
+from meep import mpb
+from matplotlib import pyplot as plt
+from IPython.display import display, HTML
+from ipywidgets import Dropdown, Output, VBox
 
 
-# Create output areas to display interactive plots
-output_epsilon = Output()
-output_bands = Output()
 
-# Function to update the plots based on selected lattice type
-def update_plots(change):
-    # Clear previous outputs
-    output_epsilon.clear_output()
-    output_bands.clear_output()
 
-    # Get the selected lattice type from the dropdown
-    lattice_type = change['new']
+if __name__ == "__main__":
 
-    # Initialize PhotonicCrystal for the selected lattice type
-    pc = PhotonicCrystal(lattice_type=lattice_type, num_bands=8)
-    pc.run_simulation(type='both', out_file=f'output_{lattice_type}.txt')
-    pc.extract_data(periods=5)
+    pc0 = PhotonicCrystal(lattice_type='square', num_bands=8)
 
-    # Create figures for epsilon and band plots
-    fig_epsilon = go.Figure()
-    fig_bands = go.Figure()
+    pc0.run_simulation(type='both', out_file='output1.txt')
+    pc0.extract_data(periods=5)
+    
+    pc1 = PhotonicCrystal(lattice_type='triangular')
+    pc1.run_simulation(type='both', out_file='output2.txt')
+    pc1.extract_data(periods=5)
+    
 
-    # Plot epsilon
-    with output_epsilon:
-        fig_epsilon, _ = pc.plot_epsilon_interactive(title=f'{lattice_type.capitalize()} Lattice', fig=fig_epsilon)
-        display(fig_epsilon)
+    # Generate the figures
+    fig0 = go.Figure()
+    fig1 = go.Figure()
+    fig2 = go.Figure()
+    fig3 = go.Figure()
 
-    # Plot bands for TE and TM
-    with output_bands:
-        pc.plot_bands_interactive(polarization='te', title=f'{lattice_type.capitalize()} Lattice TE and TM Bands', color='blue', fig=fig_bands)
-        pc.plot_bands_interactive(polarization='tm', title=f'{lattice_type.capitalize()} Lattice TE and TM Bands', color='red', fig=fig_bands)
-        display(fig_bands)
+    # Plot epsilon interactively using Plotly
+    fig0, converted_eps0 = pc0.plot_epsilon_interactive(title='Square Lattice', fig=fig0)
+    fig1, converted_eps1 = pc1.plot_epsilon_interactive(title='Triangular Lattice', fig=fig1)
 
-# Create a dropdown widget for selecting the lattice type
-dropdown = Dropdown(
-    options=['square', 'triangular'],
-    value='square',  # Default value
-    description='Lattice Type:',
-    style={'description_width': 'initial'}
-)
+    # Plot bands interactively using Plotly
+    pc0.plot_bands_interactive(polarization='te', title='Square Lattice TE and TM Bands', color='blue', fig=fig2)
+    pc0.plot_bands_interactive(polarization='tm', title='Square Lattice TE and TM Bands', color='red', fig=fig2)
+    pc1.plot_bands_interactive(polarization='te', title='Triangular Lattice TE and TM Bands', color='blue', fig=fig3)
+    pc1.plot_bands_interactive(polarization='tm', title='Triangular Lattice TE and TM Bands', color='red', fig=fig3)
+     
+    
+    
 
-# Set the callback function to update the plots when the dropdown value changes
-dropdown.observe(update_plots, names='value')
+    
 
-# Initialize the first plots with default selection
-update_plots({'new': 'square'})
-
-# Display the dropdown and the plot outputs in a vertical box
-display(VBox([dropdown, output_epsilon, output_bands]))
-
+        git commit 
+    # %%
