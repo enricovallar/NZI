@@ -157,7 +157,7 @@ class PhotonicCrystal:
         fig.add_trace(go.Heatmap(z=converted_eps, colorscale='Viridis'))
         fig.update_layout(title=title, coloraxis_colorbar=dict(title='$\\epsilon $'))
 
-        return fig, converted_eps
+        return converted_eps
             
 
 
@@ -237,7 +237,7 @@ class PhotonicCrystal:
             showlegend=False
         )
 
-        return fig
+        
                 
 
         
@@ -308,6 +308,7 @@ from meep import mpb
 from matplotlib import pyplot as plt
 from IPython.display import display, HTML
 from ipywidgets import Dropdown, Output, VBox
+import os
 
 
 
@@ -331,19 +332,28 @@ if __name__ == "__main__":
     fig3 = go.Figure()
 
     # Plot epsilon interactively using Plotly
-    fig0, converted_eps0 = pc0.plot_epsilon_interactive(title='Square Lattice', fig=fig0)
-    fig1, converted_eps1 = pc1.plot_epsilon_interactive(title='Triangular Lattice', fig=fig1)
+    converted_eps0 = pc0.plot_epsilon_interactive(title='Square Lattice', fig=fig0)
+    converted_eps1 = pc1.plot_epsilon_interactive(title='Triangular Lattice', fig=fig1)
 
     # Plot bands interactively using Plotly
     pc0.plot_bands_interactive(polarization='te', title='Square Lattice TE and TM Bands', color='blue', fig=fig2)
     pc0.plot_bands_interactive(polarization='tm', title='Square Lattice TE and TM Bands', color='red', fig=fig2)
     pc1.plot_bands_interactive(polarization='te', title='Triangular Lattice TE and TM Bands', color='blue', fig=fig3)
     pc1.plot_bands_interactive(polarization='tm', title='Triangular Lattice TE and TM Bands', color='red', fig=fig3)
+    
+    # Create the 'pics' directory if it doesn't exist
+    if not os.path.exists('pics'):
+        os.makedirs('pics')
+
+    # Save the figures as HTML files
+    fig0.write_html('pics/square_lattice_epsilon.html')
+    fig1.write_html('pics/triangular_lattice_epsilon.html')
+    fig2.write_html('pics/square_lattice_bands.html')
+    fig3.write_html('pics/triangular_lattice_bands.html')
+    
+    
+
+    
+
      
-    
-    
-
-    
-
-        git commit 
     # %%

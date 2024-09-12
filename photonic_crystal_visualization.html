@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Go Figure Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        select {
+            padding: 10px;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+        #plots-container {
+            display: flex;
+            justify-content: space-between;
+        }
+        iframe {
+            width: 45%;
+            height: 500px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Select Crystal Lattice and Geometry ID</h1>
+
+    <!-- Dropdown menu to select an ID -->
+    <select id="idDropdown" onchange="updatePlots()">
+        <!-- Options will be populated dynamically -->
+    </select>
+
+    <!-- Container to display the epsilon and gaps plots -->
+    <div id="plots-container">
+        <div>
+            <h3>Epsilon Plot</h3>
+            <iframe id="epsilonPlot" src="" title="Epsilon plot will appear here"></iframe>
+        </div>
+        <div>
+            <h3>Gaps Plot</h3>
+            <iframe id="gapsPlot" src="" title="Gaps plot will appear here"></iframe>
+        </div>
+    </div>
+
+    <script>
+        // Function to fetch IDs from the server
+        async function fetchIds() {
+            try {
+                const response = await fetch('/pics');
+                const files = await response.json();
+                const ids = files
+                    .filter(file => file.endsWith('_bands.html'))
+                    .map(file => file.replace('_bands.html', ''));
+                return ids;
+            } catch (error) {
+                console.error('Error fetching IDs:', error);
+                return [];
+            }
+        }
+
+        // Fetch IDs and populate the dropdown on page load
+        window.onload = async function() {
+            const ids = await fetchIds();
+            ids.forEach(id => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.text = id;
+                idDropdown.appendChild(option);
+            });
+        };
+
+        // Get references to the dropdown and iframe elements
+        const idDropdown = document.getElementById('idDropdown');
+        const epsilonPlot = document.getElementById('epsilonPlot');
+        const gapsPlot = document.getElementById('gapsPlot');
+
+        // Function to update the plots when an ID is selected
+        function updatePlots() {
+            const selectedId = idDropdown.value;
+            epsilonPlot.src = `pics/${selectedId}_epsilon.html`;
+            gapsPlot.src = `pics/${selectedId}_bands.html`;
+        }
+    </script>
+
+</body>
+</html>
