@@ -1,9 +1,10 @@
 import math
 import meep as mp
 from meep import mpb
-import matplotlib.pyplot as plt  # Ensure you have matplotlib imported for plotting
-import sys 
-
+from matplotlib import pyplot as plt
+from IPython.display import display, HTML
+from ipywidgets import Dropdown, Output, VBox
+import plotly.graph_objects as go
 
 class PhotonicCrystal:
     
@@ -15,7 +16,6 @@ class PhotonicCrystal:
                 k_points=None,
                 interp=10,
                 lattice_type=None):
-
         """
         Initialize a PhotonicCrystal object.
 
@@ -31,15 +31,14 @@ class PhotonicCrystal:
         Raises:
         ValueError: If geometry_lattice is None and k_points is not None.
         """
-
         if geometry is None:
             geometry = PhotonicCrystal.basic_geometry()
         if geometry_lattice is None and k_points is not None:
             raise ValueError("Both geometry_lattice and k_points must be None or both not None.")
         elif lattice_type is None or lattice_type == 'square':
-                geometry_lattice, k_points = PhotonicCrystal.square_lattice()
+            geometry_lattice, k_points = PhotonicCrystal.square_lattice()
         elif lattice_type == 'triangular':
-                geometry_lattice, k_points = PhotonicCrystal.triangular_lattice()
+            geometry_lattice, k_points = PhotonicCrystal.triangular_lattice()
 
         self.num_bands = num_bands
         self.resolution = resolution
@@ -63,7 +62,6 @@ class PhotonicCrystal:
             resolution=self.resolution,
             num_bands=self.num_bands
         )
-    
 
     def run_simulation(self, type='both', runner=None, out_file="std_out_red.txt"):
         """
@@ -74,39 +72,31 @@ class PhotonicCrystal:
         - runner: The name of the function to run the simulation. Default is None.
         - out_file: The file to redirect the standard output to. Default is None.
         """
-        with open(out_file, 'w') as sys.stdout:
-        
-            if runner is None: 
-                if type == 'tm':
-                    self.ms.run_tm()
-                    self.freqs_tm = self.ms.all_freqs
-                    self.gaps_tm = self.ms.gap_list
-                elif type == 'te':
-                    self.ms.run_te()
-                    self.freqs_te = self.ms.all_freqs
-                    self.gaps_te = self.ms.gap_list
-                elif type == 'both':
-                    self.ms.run_tm()
-                    self.freqs_tm = self.ms.all_freqs
-                    self.gaps_tm = self.ms.gap_list
+        with open(out_file, 'w') as f:
+            with contextlib.redirect_stdout(f):
+                if runner is None: 
+                    if type == 'tm':
+                        self.ms.run_tm()
+                        self.freqs_tm = self.ms.all_freqs
+                        self.gaps_tm = self.ms.gap_list
+                    elif type == 'te':
+                        self.ms.run_te()
+                        self.freqs_te = self.ms.all_freqs
+                        self.gaps_te = self.ms.gap_list
+                    elif type == 'both':
+                        self.ms.run_tm()
+                        self.freqs_tm = self.ms.all_freqs
+                        self.gaps_tm = self.ms.gap_list
 
-                    self.ms.run_te()
-                    self.freqs_te = self.ms.all_freqs
-                    self.gaps_te = self.ms.gap_list
+                        self.ms.run_te()
+                        self.freqs_te = self.ms.all_freqs
+                        self.gaps_te = self.ms.gap_list
+                    else:
+                        print("Invalid type. Please enter 'tm', 'te' or 'both'.")
                 else:
-                    print("Invalid type. Please enter 'tm', 'te' or 'both'.")
-            else:
-                getattr(self.ms, runner)()
-                self.freqs = self.ms.all_freqs
-                self.gaps = self.ms.gap_list
-            
-            if out_file is not None:
-                sys.stdout.close()
-                sys.stdout = sys.__stdout__
-        
-            sys.stdout.close()
-        sys.stdout = sys.__stdout__
-                
+                    getattr(self.ms, runner)()
+                    self.freqs = self.ms.all_freqs
+                    self.gaps = self.ms.gap_list
 
     def extract_data(self, periods: int=3):
         """
@@ -117,77 +107,61 @@ class PhotonicCrystal:
         """
         self.md = mpb.MPBData(rectify=True, periods=periods, resolution=self.resolution)
 
-    def plot_epsilon(self, fig=None, ax=None, title='Epsilon'):
+    def plot_epsilon_interactive(self, fig=None, title='Epsilon'):
         """
-        Plot the epsilon values obtained from the simulation.
+        Plot the epsilon values obtained from the simulation interactively using Plotly.
         """
         if self.ms is None:
             print("Simulation not run yet. Please run the simulation first.")
             return
         eps = self.ms.get_epsilon()
         converted_eps = self.md.convert(eps)
-        
-        if ax is not None:
-            im = ax.imshow(converted_eps, interpolation='spline36', cmap='viridis')
-            ax.axis('off')
-            ax.set_title(title)
-            cbar = fig.colorbar(im, ax=ax)
-            cbar.set_label('$\\epsilon $')
 
-        else:
-            plt.imshow(converted_eps, interpolation='spline36', cmap='viridis')
-            cbar = plt.colorbar()
-            cbar.set_label('$\\epsilon $')
-            plt.axis('off')
-            plt.title(title)
-            
+        if fig is None:
+            fig = go.Figure()
 
+        fig.add_trace(go.Heatmap(z=converted_eps, colorscale='Viridis'))
+        fig.update_layout(title=title, coloraxis_colorbar=dict(title='$\\epsilon $'))
 
-        return converted_eps
+        return fig, converted_eps
 
-    def plot_bands(self, 
-                   fig=None, 
-                   ax=None, 
-                   polarization="te", 
-                   color= "red",  
-                   title='Bands'):
+    def plot_bands_interactive(self, polarization="te", title='Bands', fig=None, color='blue'):
         """
-        Plot the band structure of the photonic crystal.
+        Plot the band structure of the photonic crystal interactively using Plotly.
         """
-        
         freqs = getattr(self, f'freqs_{polarization}')
         gaps = getattr(self, f'gaps_{polarization}')
         if freqs is None:
             print("Simulation not run yet. Please run the simulation first.")
             return
-        xs = range(len(freqs))
-        if ax is not None:
-            ax.plot(freqs, color=color)
 
-            for gap in gaps:
-                if gap[0]>1:
-                    ax.fill_between(xs, gap[1], gap[2], color= color, alpha=0.2)
-            
-            for x,freq in zip(xs,freqs):
-                ax.scatter([x]*len(freq), freq, color=color, s=10)
-        
-        
-        
+        xs = list(range(len(freqs)))
+        if fig is None:
+            fig = go.Figure()
 
-        points_in_between = (len(freqs) - 4) / 3
-        tick_locs = [i*points_in_between+i for i in range(4)]
-        tick_labs = ['Γ', 'X', 'M', 'Γ']
-        ax.set_xticks(tick_locs)
-        ax.set_xticklabels(tick_labs, size=16)
-        ax.set_ylabel('frequency (c/a)', size=16)
-        ax.grid(True)
-        ax.set_xlim(0, len(freqs)-1)
+        for band in zip(*freqs):
+            fig.add_trace(go.Scatter(x=xs, y=band, mode='lines', line=dict(color=color)))
 
-                
+        for gap in gaps:
+            if gap[0] > 1:
+                fig.add_shape(type="rect",
+                              x0=xs[0], x1=xs[-1],
+                              y0=gap[1], y1=gap[2],
+                              fillcolor="red", opacity=0.2, line_width=0)
 
-        
+        fig.update_layout(
+            title=title,
+            xaxis=dict(
+                tickmode='array',
+                tickvals=[i * (len(freqs) - 4) / 3 + i for i in range(4)],
+                ticktext=['Γ', 'X', 'M', 'Γ']
+            ),
+            yaxis_title='frequency (c/a)',
+            showlegend=False
+        )
 
-        
+        return fig
+
     @staticmethod
     def basic_geometry():
         """
@@ -240,57 +214,55 @@ class PhotonicCrystal:
             mp.Vector3(),               # Gamma
         ]
         return lattice, k_points
-    
-    
-                             
-    
-# Example usage
-#%%
-from photonic_crystal import PhotonicCrystal
-import math
-import meep as mp
-from meep import mpb
-from matplotlib import pyplot as plt
-import sys
 
 
-if __name__ == "__main__":
+# Create output areas to display interactive plots
+output_epsilon = Output()
+output_bands = Output()
 
-    with open('output.txt', 'w') as sys.stdout:
-        sys.stdout = open('output.txt', 'w')
+# Function to update the plots based on selected lattice type
+def update_plots(change):
+    # Clear previous outputs
+    output_epsilon.clear_output()
+    output_bands.clear_output()
 
-        pc0 = PhotonicCrystal(lattice_type='square', num_bands=8)
+    # Get the selected lattice type from the dropdown
+    lattice_type = change['new']
 
-        pc0.run_simulation(type='both', out_file='output1.txt')
-        pc0.extract_data(periods=5)
-        
-        pc1 = PhotonicCrystal(lattice_type='triangular')
-        pc1.run_simulation(type='both', out_file='output2.txt')
-        pc1.extract_data(periods=5)
-        
-        
+    # Initialize PhotonicCrystal for the selected lattice type
+    pc = PhotonicCrystal(lattice_type=lattice_type, num_bands=8)
+    pc.run_simulation(type='both', out_file=f'output_{lattice_type}.txt')
+    pc.extract_data(periods=5)
 
-        #%%
-        fig, axs = plt.subplots(1, 2, figsize=(10, 6))
-        pc0.plot_epsilon(fig=fig, ax=axs[0], title='Square Lattice')
-        pc1.plot_epsilon(fig=fig, ax=axs[1], title='Triangular Lattice')
-        fig.tight_layout()
-        plt.show()
+    # Create figures for epsilon and band plots
+    fig_epsilon = go.Figure()
+    fig_bands = go.Figure()
 
+    # Plot epsilon
+    with output_epsilon:
+        fig_epsilon, _ = pc.plot_epsilon_interactive(title=f'{lattice_type.capitalize()} Lattice', fig=fig_epsilon)
+        display(fig_epsilon)
 
-        fig, axs = plt.subplots(2, 1, figsize=(10, 10))
+    # Plot bands for TE and TM
+    with output_bands:
+        pc.plot_bands_interactive(polarization='te', title=f'{lattice_type.capitalize()} Lattice TE and TM Bands', color='blue', fig=fig_bands)
+        pc.plot_bands_interactive(polarization='tm', title=f'{lattice_type.capitalize()} Lattice TE and TM Bands', color='red', fig=fig_bands)
+        display(fig_bands)
 
-        pc0.plot_bands(fig=fig, ax=axs[0], polarization='te', color='red', title='Square Lattice')
-        pc0.plot_bands(fig=fig, ax=axs[0], polarization='tm', color='blue', title='Square Lattice')
+# Create a dropdown widget for selecting the lattice type
+dropdown = Dropdown(
+    options=['square', 'triangular'],
+    value='square',  # Default value
+    description='Lattice Type:',
+    style={'description_width': 'initial'}
+)
 
-        pc1.plot_bands(fig=fig, ax=axs[1], polarization='te', color='red', title='Triangular Lattice')
-        pc1.plot_bands(fig=fig, ax=axs[1], polarization='tm', color='blue', title='Triangular Lattice')
-        fig.tight_layout()
-        plt.show()
+# Set the callback function to update the plots when the dropdown value changes
+dropdown.observe(update_plots, names='value')
 
-        sys.stdout.close()
-    sys.stdout = sys.__stdout__
+# Initialize the first plots with default selection
+update_plots({'new': 'square'})
 
+# Display the dropdown and the plot outputs in a vertical box
+display(VBox([dropdown, output_epsilon, output_bands]))
 
-        
-    # %%
