@@ -1,5 +1,6 @@
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, send_from_directory, request, render_template_string
 import os
+import subprocess
 
 app = Flask(__name__)
 
@@ -47,6 +48,32 @@ def serve_visualization():
         return send_from_directory(os.path.dirname(os.path.abspath(__file__)), 'photonic_crystal_visualization.html')
     except Exception as e:
         return str(e), 500
+
+@app.route('/run_simulation')
+def run_simulation():
+    lattice_geometry = request.args.get('latticeGeometry')
+    cylinder_radius = request.args.get('cylinderRadius')
+
+    # Run the specific Python file with the chosen values
+    result = subprocess.run(
+        ['python3', 'calculate_bands.py', lattice_geometry, cylinder_radius],
+        capture_output=True, text=True
+    )
+
+    try:
+        result_json = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        return jsonify({"error": "Failed to parse JSON response", "details": str(e), "output": result.stdout}), 500
+
+    return jsonify(result_json)
+
+
+
+@app.route('/simulator')
+def serve_simulator():
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), 'simulator.html')
+
+
         
 if __name__ == '__main__':
     app.run(debug=True)

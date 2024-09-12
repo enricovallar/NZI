@@ -224,7 +224,7 @@ class PhotonicCrystal:
                 fig.add_shape(type="rect",
                               x0=xs[0], x1=xs[-1],
                               y0=gap[1], y1=gap[2],
-                              fillcolor="red", opacity=0.2, line_width=0)
+                              fillcolor=color, opacity=0.2, line_width=0)
 
         fig.update_layout(
             title=title,
@@ -244,7 +244,7 @@ class PhotonicCrystal:
 
         
     @staticmethod
-    def basic_geometry():
+    def basic_geometry(radius=0.2, eps=12):
         """
         Define the basic geometry of the photonic crystal.
         
@@ -252,7 +252,7 @@ class PhotonicCrystal:
         - geometry: A list of geometric objects representing the crystal structure.
         """
         geometry = [
-            mp.Cylinder(radius=0.2, material=mp.Medium(epsilon=12)),
+            mp.Cylinder(radius=radius, material=mp.Medium(epsilon=eps)),
         ]
         return geometry
     
@@ -324,11 +324,15 @@ if __name__ == "__main__":
     pc1.run_simulation(type='both', out_file='output2.txt')
     pc1.extract_data(periods=5)
     
-    # Generate the figures with decreased width and height but increased dpi
-    fig0 = go.Figure(layout=go.Layout(width=800, height=600))
-    fig1 = go.Figure(layout=go.Layout(width=800, height=600))
-    fig2 = go.Figure(layout=go.Layout(width=800, height=600))
-    fig3 = go.Figure(layout=go.Layout(width=800, height=600))
+    # Set width and height to match the iframe size in your HTML
+    width = 500  # The width of the iframe container in pixels
+    height = 500  # The height of the iframe container in pixels
+
+    # Generate the figures with the same width and height as the iframe
+    fig0 = go.Figure(layout=go.Layout(width=width, height=height))
+    fig1 = go.Figure(layout=go.Layout(width=width, height=height))
+    fig2 = go.Figure(layout=go.Layout(width=width, height=height))
+    fig3 = go.Figure(layout=go.Layout(width=width, height=height))
 
     # Plot epsilon interactively using Plotly
     converted_eps0 = pc0.plot_epsilon_interactive(title='Square Lattice', fig=fig0)

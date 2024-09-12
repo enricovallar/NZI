@@ -42,12 +42,18 @@
     <div id="plots-container">
         <div class="plot-container">
             <h3>Epsilon Plot</h3>
-            <iframe id="epsilonPlot" src="" title="Epsilon plot will appear here"></iframe>
+            <iframe id="epsilonPlot" src="" title="Epsilon plot will appear here" onload="resizeIframe(this)"></iframe>
         </div>
         <div class="plot-container">
             <h3>Gaps Plot</h3>
-            <iframe id="gapsPlot" src="" title="Gaps plot will appear here"></iframe>
+            <iframe id="gapsPlot" src="" title="Gaps plot will appear here" onload="resizeIframe(this)"></iframe>
         </div>
+
+        <script>
+            function resizeIframe(iframe) {
+            iframe.style.height = iframe.contentWindow.document.body.scrollHeight + 'px';
+            }
+        </script>
     </div>
 
     <script>
