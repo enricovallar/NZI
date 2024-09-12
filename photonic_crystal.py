@@ -324,12 +324,11 @@ if __name__ == "__main__":
     pc1.run_simulation(type='both', out_file='output2.txt')
     pc1.extract_data(periods=5)
     
-
-    # Generate the figures
-    fig0 = go.Figure()
-    fig1 = go.Figure()
-    fig2 = go.Figure()
-    fig3 = go.Figure()
+    # Generate the figures with decreased width and height but increased dpi
+    fig0 = go.Figure(layout=go.Layout(width=800, height=600))
+    fig1 = go.Figure(layout=go.Layout(width=800, height=600))
+    fig2 = go.Figure(layout=go.Layout(width=800, height=600))
+    fig3 = go.Figure(layout=go.Layout(width=800, height=600))
 
     # Plot epsilon interactively using Plotly
     converted_eps0 = pc0.plot_epsilon_interactive(title='Square Lattice', fig=fig0)

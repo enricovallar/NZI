@@ -17,9 +17,13 @@
         #plots-container {
             display: flex;
             justify-content: space-between;
+            gap: 20px; /* Add some space between the plots */
+        }
+        .plot-container {
+            width: 50%;
         }
         iframe {
-            width: 45%;
+            width: 100%;
             height: 500px;
             border: 1px solid #ddd;
         }
@@ -36,11 +40,11 @@
 
     <!-- Container to display the epsilon and gaps plots -->
     <div id="plots-container">
-        <div>
+        <div class="plot-container">
             <h3>Epsilon Plot</h3>
             <iframe id="epsilonPlot" src="" title="Epsilon plot will appear here"></iframe>
         </div>
-        <div>
+        <div class="plot-container">
             <h3>Gaps Plot</h3>
             <iframe id="gapsPlot" src="" title="Gaps plot will appear here"></iframe>
         </div>
