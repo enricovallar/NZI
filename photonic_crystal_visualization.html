@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Go Figure Viewer</title>
+    <title>Interactive Photonic Crystal Visualization</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -46,8 +46,8 @@
                 <iframe id="epsilonPlot" src="" title="Epsilon plot will appear here" onload="resizeIframe(this)"></iframe>
             </div>
             <div class="plot-container" style="flex: 1; margin-left: 10px;">
-                <h3>Gaps Plot</h3>
-                <iframe id="gapsPlot" src="" title="Gaps plot will appear here" onload="resizeIframe(this)"></iframe>
+                <h3>Bands Plot</h3>
+                <iframe id="gapsPlot" src="" title="Bands plot will appear here" onload="resizeIframe(this)"></iframe>
             </div>
         </div>
         <div class="plot-container" style="margin-top: 20px;">
@@ -55,7 +55,6 @@
             <iframe id="fieldPlot" src="" title="Field plot will appear here" onload="resizeIframe(this)"></iframe>
         </div>
     </div>
-    
 
     <script>
         function resizeIframe(iframe) {
@@ -99,7 +98,21 @@
             const selectedId = idDropdown.value;
             epsilonPlot.src = `pics/${selectedId}_epsilon.html`;
             gapsPlot.src = `pics/${selectedId}_bands.html`;
-            fieldPlot.src = `pics/${selectedId}_field.html`; // Load the field plot
+            fieldPlot.src = `pics/${selectedId}_field.html`; // Load the initial field plot
+
+            // Add a click event listener to the bands plot to update the field plot based on the clicked k-point
+            gapsPlot.onload = function() {
+                gapsPlot.contentWindow.document.addEventListener('plotly_click', function(event) {
+                    const clickedKPoint = event.points[0].customdata;  // Get the k-point from the clicked data
+                    // Fetch the field plot corresponding to the clicked k-point
+                    fetch(`/plot_mode?k_point=${JSON.stringify(clickedKPoint)}&id=${selectedId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            fieldPlot.src = `data:text/html;base64,${data.fieldHtml}`;
+                        })
+                        .catch(error => console.error('Error fetching field plot:', error));
+                });
+            };
         }
     </script>
 

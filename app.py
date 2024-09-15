@@ -2,6 +2,8 @@ from flask import Flask, jsonify, send_from_directory, request, render_template_
 import os
 import subprocess
 import json
+import pickle
+from photonic_crystal import PhotonicCrystal  # Ensure you import your PhotonicCrystal class
 
 app = Flask(__name__)
 
@@ -68,14 +70,35 @@ def run_simulation():
 
     return jsonify(result_json)
 
-
-
+# Route to serve the simulator.html file
 @app.route('/simulator')
 def serve_simulator():
     return send_from_directory(os.path.dirname(os.path.abspath(__file__)), 'simulator.html')
 
 
+# Route to handle plotting the mode corresponding to a clicked k-point
+@app.route('/plot_mode')
+def plot_mode():
+    try:
+        # Get k_point and id from the request
+        k_point = request.args.get('k_point')
+        pickle_id = request.args.get('id')
         
+        # Convert the k_point back to a vector (assumed to be a string in the form (x, y, z))
+        k_point_tuple = eval(k_point)
+        k_point_vector = mp.Vector3(*k_point_tuple)  # Convert to mp.Vector3 for Meep
+        
+        # Load the photonic crystal object from the pickle file
+        photonic_crystal = PhotonicCrystal.load_photonic_crystal(pickle_id)
+        
+        # Plot the mode corresponding to the clicked k-point
+        fig = photonic_crystal.plot_field_interactive(k_point=k_point_vector)
+        
+        # Return the figure as an HTML response (in base64 format to embed it directly)
+        return jsonify({'fieldHtml': fig.to_html()})
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True)
-

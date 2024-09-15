@@ -7,6 +7,7 @@ import contextlib
 import plotly.graph_objects as go
 import plotly.subplots
 import numpy as np
+import pickle 
 
 
 class PhotonicCrystal:
@@ -19,7 +20,8 @@ class PhotonicCrystal:
                 k_points=None,
                 interp=10,
                 periods=5, 
-                lattice_type=None):
+                lattice_type=None,
+                pickle_id = None):
 
         """
         Initialize a PhotonicCrystal object.
@@ -32,6 +34,8 @@ class PhotonicCrystal:
         k_points (optional): The k-points for the simulation. Defaults to None.
         interp (int, optional): The interpolation factor for k-points. Defaults to 4.
         lattice_type (optional): The type of lattice ('square' or 'triangular'). Defaults to None.
+        periods (int, optional): The number of periods to extract. Defaults to 5.
+        pickle_id (optional): The pickle ID for the simulation. Defaults to None.
 
         Raises:
         ValueError: If geometry_lattice is None and k_points is not None.
@@ -51,9 +55,12 @@ class PhotonicCrystal:
         if lattice_type is None or lattice_type == 'square':
                 geometry_lattice, k_points = PhotonicCrystal.square_lattice()
                 print("square lattice")
+                self.lattice_type = 'square'
         elif lattice_type == 'triangular':
                 geometry_lattice, k_points = PhotonicCrystal.triangular_lattice()
                 print("triangular lattice")
+                self.lattice_type = 'triangular'
+        
 
         self.num_bands = num_bands
         self.resolution = resolution
@@ -74,7 +81,24 @@ class PhotonicCrystal:
         self.md = None
         self.converted_eps = None
 
+        # Allow the user to pickle the object if an ID is provided
+        if pickle_id:
+            self.pickle_photonic_crystal(pickle_id)
 
+    def pickle_photonic_crystal(self, pickle_id):
+        # Ensure the 'pickle_data' directory exists
+        if not os.path.exists('pickle_data'):
+            os.makedirs('pickle_data')
+
+        # Save the object to a pickle file
+        with open(f'pickle_data/{pickle_id}.pkl', 'wb') as file:
+            pickle.dump(self, file)
+
+    @staticmethod
+    def load_photonic_crystal(pickle_id):
+        # Load the object from the pickle file
+        with open(f'pickle_data/{pickle_id}.pkl', 'rb') as file:
+            return pickle.load(file)
         
     
     def set_solver(self):
@@ -254,7 +278,8 @@ class PhotonicCrystal:
 
     def plot_bands_interactive(self, polarization="te", title='Bands', fig=None, color='blue'):
         """
-        Plot the band structure of the photonic crystal interactively using Plotly.
+        Plot the band structure of the photonic crystal interactively using Plotly, 
+        with k-points displayed on hover and click events to trigger external scripts.
         """
         freqs = getattr(self, f'freqs_{polarization}')
         gaps = getattr(self, f'gaps_{polarization}')
@@ -263,52 +288,85 @@ class PhotonicCrystal:
             return
 
         xs = list(range(len(freqs)))
+
+        # Extract the interpolated k-points as vectors and format them for hover and click
+        k_points_interpolated = [kp for kp in self.k_points_interpolated]
+
         if fig is None:
             fig = go.Figure()
 
+        # Iterate through each frequency band
         for band in zip(*freqs):
-            fig.add_trace(go.Scatter(x=xs, y=band, mode='lines', line=dict(color=color)))
+            # Generate hover text with the corresponding k-point and frequency
+            hover_texts = [
+                f"k-point: ({kp.x:.4f}, {kp.y:.4f}, {kp.z:.4f})<br>frequency: {f:.4f}"
+                for kp, f in zip(k_points_interpolated, band)
+            ]
+            # Add the line trace with hover info
+            fig.add_trace(go.Scatter(
+                x=xs, 
+                y=band, 
+                mode='lines', 
+                line=dict(color=color),
+                text=hover_texts,  # Custom hover text
+                hoverinfo='text',  # Display only the custom hover text
+                customdata=[(kp.x, kp.y, kp.z) for kp in k_points_interpolated],  # Attach k-points as custom data (vector components)
+            ))
 
+        # Add bandgap shading
         for gap in gaps:
             if gap[0] > 1:
-                fig.add_shape(type="rect",
-                              x0=xs[0], x1=xs[-1],
-                              y0=gap[1], y1=gap[2],
-                              fillcolor=color, opacity=0.2, line_width=0)
+                fig.add_shape(
+                    type="rect",
+                    x0=xs[0], 
+                    x1=xs[-1],
+                    y0=gap[1], 
+                    y1=gap[2],
+                    fillcolor=color, 
+                    opacity=0.2, 
+                    line_width=0
+                )
 
-        fig.add_trace(go.Scatter(
-            x=[None], y=[None],
-            mode='lines',
-            line=dict(color=color),
-            showlegend=True,
-            name=polarization.upper()
-        ))
-
-
+        # Customize the x-axis with the high symmetry points
+        k_high_sym = self.get_high_symmetry_points()
         fig.update_layout(
             title=title,
             xaxis=dict(
                 tickmode='array',
                 tickvals=[i * (len(freqs) - 4) / 3 + i for i in range(4)],
-                ticktext=['Γ', 'X', 'M', 'Γ']
+                ticktext=list(k_high_sym.keys())
             ),
             yaxis_title='frequency (c/a)',
             showlegend=False
         )
+        
+        # Add a JavaScript callback to handle clicks
+        fig.update_layout(
+            clickmode='event+select'  # Enable click events
+        )
+
+        return fig
+
+
+    def get_high_symmetry_points(self):
+        """
+        Get the high symmetry points for the simulation.
+        """
+        k_high_sym = {}
+        if self.lattice_type == 'square':
+            k_high_sym['Γ'] = self.k_points[0]  # Gamma
+            k_high_sym['X'] = self.k_points[2]
+            k_high_sym['M'] = self.k_points[1]
+        elif self.lattice_type == 'triangular':
+            k_high_sym['Γ'] = self.k_points[0]  # Gamma
+            k_high_sym['K'] = self.k_points[1]
+            k_high_sym['M'] = self.k_points[2]
+        else:
+            print("Lattice type was not specified")
+        
+        return k_high_sym
 
         
-                
-
-    def get_k_points_dictionary(self):
-        """
-        Get the dictionary of k-points for the simulation.
-        """
-        
-        return {
-            'Gamma': self.k_points[0],
-            'M': self.k_points[1],
-            'X': self.k_points[2],
-        }
 
         
     @staticmethod
@@ -358,8 +416,8 @@ class PhotonicCrystal:
                           basis2=mp.Vector3(0.5, math.sqrt(3)/2))
         k_points = [
             mp.Vector3(),               # Gamma
-            mp.Vector3(y=0.5),          # M
-            mp.Vector3(-1./3, 1./3),    # K
+            mp.Vector3(y=0.5),          # K
+            mp.Vector3(-1./3, 1./3),    # M
             mp.Vector3(),               # Gamma
         ]
         return lattice, k_points
@@ -601,8 +659,8 @@ if __name__ == "__main__":
 
     
     # Get the k-point for the M point from the dictionary
-    k_points_dict0 = pc0.get_k_points_dictionary()
-    k_points_dict1 = pc1.get_k_points_dictionary()
+    k_points_dict0 = pc0.get_high_symmetry_points()
+    k_points_dict1 = pc1.get_high_symmetry_points()
     
     
    
