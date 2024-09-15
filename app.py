@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, send_from_directory, request, render_template_string
 import os
 import subprocess
+import json
 
 app = Flask(__name__)
 
@@ -54,7 +55,7 @@ def run_simulation():
     lattice_geometry = request.args.get('latticeGeometry')
     cylinder_radius = request.args.get('cylinderRadius')
 
-    # Run the specific Python file with the chosen values
+    # Run the Python file with the selected parameters
     result = subprocess.run(
         ['python3', 'calculate_bands.py', lattice_geometry, cylinder_radius],
         capture_output=True, text=True

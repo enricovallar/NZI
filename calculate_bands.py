@@ -1,5 +1,7 @@
+# calculate_bands.py
+
 import sys
-import PhotonicCrystal
+from photonic_crystal import PhotonicCrystal
 import plotly.graph_objects as go
 import json
 
@@ -21,8 +23,8 @@ def calculate_bands(lattice_geometry="square", cylinder_radius=0.2, sim_type="bo
     fig_bands = go.Figure(layout=go.Layout(width=500, height=500))
 
     pc.plot_epsilon_interactive(title="Lattice", fig=fig_eps)
-    pc.plot_bands_interactive(polarization='te', title='Square Lattice TE and TM Bands', color='blue', fig=fig_bands)
-    pc.plot_bands_interactive(polarization='tm', title='Square Lattice TE and TM Bands', color='red', fig=fig_bands)
+    pc.plot_bands_interactive(polarization='te', title='TE and TM Bands', color='blue', fig=fig_bands)
+    pc.plot_bands_interactive(polarization='tm', title='TE and TM Bands', color='red', fig=fig_bands)
 
     return fig_eps.to_html(full_html=False), fig_bands.to_html(full_html=False)
 
@@ -32,10 +34,10 @@ if __name__ == "__main__":
         sys.exit(1)
 
     lattice_geometry = sys.argv[1]
-    cylinder_radius = sys.argv[2]
+    cylinder_radius = float(sys.argv[2])
 
     try:
-        fig_eps, fig_bands = calculate_bands(lattice_geometry, float(cylinder_radius))
+        fig_eps, fig_bands = calculate_bands(lattice_geometry, cylinder_radius)
         result = {
             "fig_eps": fig_eps,
             "fig_bands": fig_bands
@@ -44,3 +46,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(json.dumps({"error": str(e)}))
         sys.exit(1)
+
+  

@@ -11,7 +11,6 @@
         <label for="latticeGeometry">Lattice Geometry:</label>
         <select id="latticeGeometry" name="latticeGeometry">
             <option value="square">Square</option>
-            <option value="hexagonal">Hexagonal</option>
             <option value="triangular">Triangular</option>
         </select>
         <br><br>
@@ -34,8 +33,7 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
-                        console.error('Error:', data.error);
-                        alert('Error: ' + data.error + '\nDetails: ' + data.details);
+                        alert('Error: ' + data.error);
                     } else {
                         document.getElementById('resultFrame1').srcdoc = data.fig_eps;
                         document.getElementById('resultFrame2').srcdoc = data.fig_bands;
@@ -46,3 +44,4 @@
     </script>
 </body>
 </html>
+

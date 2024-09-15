@@ -16,11 +16,11 @@
         }
         #plots-container {
             display: flex;
-            justify-content: space-between;
-            gap: 20px; /* Add some space between the plots */
+            flex-direction: column;
+            gap: 20px; /* Add some space between the plot rows */
         }
         .plot-container {
-            width: 50%;
+            width: 100%;
         }
         iframe {
             width: 100%;
@@ -38,25 +38,30 @@
         <!-- Options will be populated dynamically -->
     </select>
 
-    <!-- Container to display the epsilon and gaps plots -->
+    <!-- Container to display the epsilon, gaps, and fields plots -->
     <div id="plots-container">
-        <div class="plot-container">
-            <h3>Epsilon Plot</h3>
-            <iframe id="epsilonPlot" src="" title="Epsilon plot will appear here" onload="resizeIframe(this)"></iframe>
+        <div style="display: flex; justify-content: space-between;">
+            <div class="plot-container" style="flex: 1; margin-right: 10px;">
+                <h3>Epsilon Plot</h3>
+                <iframe id="epsilonPlot" src="" title="Epsilon plot will appear here" onload="resizeIframe(this)"></iframe>
+            </div>
+            <div class="plot-container" style="flex: 1; margin-left: 10px;">
+                <h3>Gaps Plot</h3>
+                <iframe id="gapsPlot" src="" title="Gaps plot will appear here" onload="resizeIframe(this)"></iframe>
+            </div>
         </div>
-        <div class="plot-container">
-            <h3>Gaps Plot</h3>
-            <iframe id="gapsPlot" src="" title="Gaps plot will appear here" onload="resizeIframe(this)"></iframe>
+        <div class="plot-container" style="margin-top: 20px;">
+            <h3>Field Plot</h3>
+            <iframe id="fieldPlot" src="" title="Field plot will appear here" onload="resizeIframe(this)"></iframe>
         </div>
-
-        <script>
-            function resizeIframe(iframe) {
-            iframe.style.height = iframe.contentWindow.document.body.scrollHeight + 'px';
-            }
-        </script>
     </div>
+    
 
     <script>
+        function resizeIframe(iframe) {
+            iframe.style.height = iframe.contentWindow.document.body.scrollHeight + 'px';
+        }
+
         // Function to fetch IDs from the server
         async function fetchIds() {
             try {
@@ -87,12 +92,14 @@
         const idDropdown = document.getElementById('idDropdown');
         const epsilonPlot = document.getElementById('epsilonPlot');
         const gapsPlot = document.getElementById('gapsPlot');
+        const fieldPlot = document.getElementById('fieldPlot');
 
         // Function to update the plots when an ID is selected
         function updatePlots() {
             const selectedId = idDropdown.value;
             epsilonPlot.src = `pics/${selectedId}_epsilon.html`;
             gapsPlot.src = `pics/${selectedId}_bands.html`;
+            fieldPlot.src = `pics/${selectedId}_field.html`; // Load the field plot
         }
     </script>
 
