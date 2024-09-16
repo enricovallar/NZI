@@ -1,104 +1,158 @@
-from flask import Flask, jsonify, send_from_directory, request, render_template_string
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
 import os
-import subprocess
-import json
 import pickle
-from photonic_crystal import PhotonicCrystal  # Ensure you import your PhotonicCrystal class
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from photonic_crystal import PhotonicCrystal
+import math
+import meep as mp
+from meep import mpb
 
-app = Flask(__name__)
+# Path to pickle data folder
+PICKLE_DIR = 'pickle_data'
 
-# Path to the directory where 'pics' is located
-pics_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pics')
+# Helper function to list all pickled photonic crystals by their IDs
+def get_photonic_crystal_ids():
+    ids = []
+    for file in os.listdir(PICKLE_DIR):
+        if file.endswith('.pkl'):
+            ids.append(file.split('.pkl')[0])  # Remove .pkl to get the ID
+    return ids
 
-# Route to list the files in the pics directory
-@app.route('/pics')
-def list_pics_files():
-    try:
-        files = os.listdir(pics_folder)
-        # Only return files with .html extensions
-        html_files = [f for f in files if f.endswith('.html')]
-        return jsonify(html_files)
-    except Exception as e:
-        return str(e), 500
+# Initialize the Dash app
+app = dash.Dash(__name__)
 
-# Route to list the files in the root directory
-@app.route('/root')
-def list_root_files():
-    try:
-        root_folder = os.path.dirname(os.path.abspath(__file__))
-        files = os.listdir(root_folder)
-        return jsonify(files)
-    except Exception as e:
-        return str(e), 500
-
-# Route to serve the HTML files from the pics folder
-@app.route('/pics/<path:filename>')
-def serve_pics_file(filename):
-    try:
-        return send_from_directory(pics_folder, filename)
-    except Exception as e:
-        return str(e), 500
-
-# Route to serve the index.html (your interactive visualization file)
-@app.route('/')
-def serve_index():
-    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), 'index.html')
-
-# Route to serve the photonic_crystal_visualization.html file
-@app.route('/visualization')
-def serve_visualization():
-    try:
-        return send_from_directory(os.path.dirname(os.path.abspath(__file__)), 'photonic_crystal_visualization.html')
-    except Exception as e:
-        return str(e), 500
-
-@app.route('/run_simulation')
-def run_simulation():
-    lattice_geometry = request.args.get('latticeGeometry')
-    cylinder_radius = request.args.get('cylinderRadius')
-
-    # Run the Python file with the selected parameters
-    result = subprocess.run(
-        ['python3', 'calculate_bands.py', lattice_geometry, cylinder_radius],
-        capture_output=True, text=True
-    )
-
-    try:
-        result_json = json.loads(result.stdout)
-    except json.JSONDecodeError as e:
-        return jsonify({"error": "Failed to parse JSON response", "details": str(e), "output": result.stdout}), 500
-
-    return jsonify(result_json)
-
-# Route to serve the simulator.html file
-@app.route('/simulator')
-def serve_simulator():
-    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), 'simulator.html')
-
-
-# Route to handle plotting the mode corresponding to a clicked k-point
-@app.route('/plot_mode')
-def plot_mode():
-    try:
-        # Get k_point and id from the request
-        k_point = request.args.get('k_point')
-        pickle_id = request.args.get('id')
-        
-        # Convert the k_point back to a vector (assumed to be a string in the form (x, y, z))
-        k_point_tuple = eval(k_point)
-        k_point_vector = mp.Vector3(*k_point_tuple)  # Convert to mp.Vector3 for Meep
-        
-        # Load the photonic crystal object from the pickle file
-        photonic_crystal = PhotonicCrystal.load_photonic_crystal(pickle_id)
-        
-        # Plot the mode corresponding to the clicked k-point
-        fig = photonic_crystal.plot_field_interactive(k_point=k_point_vector)
-        
-        # Return the figure as an HTML response (in base64 format to embed it directly)
-        return jsonify({'fieldHtml': fig.to_html()})
+# App layout
+app.layout = html.Div([
+    # Dropdown to select the photonic crystal
+    dcc.Dropdown(
+        id='crystal-dropdown',
+        options=[{'label': pc_id, 'value': pc_id} for pc_id in get_photonic_crystal_ids()],
+        value=get_photonic_crystal_ids()[0]  # Default value is the first photonic crystal
+    ),
     
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    # Graphs for the dielectric distribution and band structure in the same row
+    html.Div([
+        html.Div([
+            html.H3("Dielectric Distribution"),
+            dcc.Graph(id='dielectric-plot')
+        ], style={'display': 'inline-block', 'width': '50%'}),
+        
+        html.Div([
+            html.H3("Band Structure"),
+            dcc.Graph(id='band-structure-plot')
+        ], style={'display': 'inline-block', 'width': '50%'})
+    ]),
+    
+    # Graphs for electric field distribution in the same row
+    html.Div([
+        html.Div([
+            html.H3("Electric Field Distribution, TE"),
+            dcc.Graph(id='field-plot-TE')
+        ], style={'display': 'inline-block', 'width': '50%'}),
+        
+        html.Div([
+            html.H3("Electric Field Distribution, TM"),
+            dcc.Graph(id='field-plot-TM')
+        ], style={'display': 'inline-block', 'width': '50%'})
+    ])
+])
 
+# Callback to update the dielectric and band structure plots based on the selected photonic crystal
+@app.callback(
+    [Output('dielectric-plot', 'figure'),
+     Output('band-structure-plot', 'figure')],
+    [Input('crystal-dropdown', 'value')]
+)
+def update_plots(selected_id):
+    # Load the selected photonic crystal from the pickle file
+    pickle_file = os.path.join(PICKLE_DIR, f'{selected_id}.pkl')
+    with open(pickle_file, 'rb') as f:
+        pc = pickle.load(f)
+    
+    # Show a circular indicator when the simulation starts
+    indicator = dcc.Loading(
+        id="loading-indicator",
+        type="circle",
+        children=html.Div(id="loading-output")
+    )
+    
+    # Run the simulation
+    pc.run_simulation(type='both')
+    pc.extract_data(periods=5)
+    
+    # Hide the circular indicator when the simulation ends
+    indicator.children = html.Div(id="loading-output", children="Simulation complete")
+    
+    # Generate dielectric distribution plot interactively
+    dielectric_fig = go.Figure(layout=dict(width=500, height=500))
+    pc.plot_epsilon_interactive(fig=dielectric_fig)
+    
+    # Generate band structure plot interactively
+    band_fig = go.Figure(layout=dict(width=500, height=500))
+    pc.plot_bands_interactive(polarization='te', color="red", fig=band_fig)
+    pc.plot_bands_interactive(polarization='tm', color="blue", fig=band_fig)
+    
+    return dielectric_fig, band_fig
+
+# Callback to plot the electric field based on a clicked point in the band structure
+@app.callback(
+    Output('field-plot', 'figure'),
+    [Input('band-structure-plot', 'clickData'),
+     Input('crystal-dropdown', 'value')]
+)
+def update_field(clickData, selected_id):
+    # Load the photonic crystal from the pickle file
+    pickle_file = os.path.join(PICKLE_DIR, f'{selected_id}.pkl')
+    with open(pickle_file, 'rb') as f:
+        pc = pickle.load(f)
+    
+    # Run the simulation if not done already
+    pc.run_simulation(type='both')
+    pc.extract_data(periods=5)
+    
+    if clickData:
+        # Extract the clicked k-point data (assuming it's available in the customdata)
+        k_point_data = clickData['points'][0]['customdata']
+        k_point = mp.Vector3(k_point_data[0], k_point_data[1], k_point_data[2])
+        
+        # Extract the corresponding frequency
+        frequency = clickData['points'][0]['y']
+        
+        # Generate the electric field plot interactively
+        field_fig = make_subplots(rows=2, cols=2, subplot_titles=("Bands Plot", "Eps Plot", "TE Field", "TM Field"))
+
+        # Add the bands plot to the top left
+        bands_fig = go.Figure()
+        pc.plot_bands(fig=bands_fig)
+        for trace in bands_fig.data:
+            field_fig.add_trace(trace, row=1, col=1)
+
+        # Add the eps plot to the top right
+        eps_fig = go.Figure()
+        pc.plot_eps(fig=eps_fig)
+        for trace in eps_fig.data:
+            field_fig.add_trace(trace, row=1, col=2)
+
+        # Add the TE field plot to the bottom left
+        te_field_fig = go.Figure()
+        pc.plot_field_interactive(k_point=k_point, frequency=frequency, fig=te_field_fig, mode='TE')
+        for trace in te_field_fig.data:
+            field_fig.add_trace(trace, row=2, col=1)
+
+        # Add the TM field plot to the bottom right
+        tm_field_fig = go.Figure()
+        pc.plot_field_interactive(k_point=k_point, frequency=frequency, fig=tm_field_fig, mode='TM')
+        for trace in tm_field_fig.data:
+            field_fig.add_trace(trace, row=2, col=2)
+
+        return field_fig
+    else:
+        # Return an empty figure if no point is clicked
+        return go.Figure()
+
+# Run the Dash app
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run_server(debug=True)

@@ -463,13 +463,14 @@ class PhotonicCrystal:
         
 
     def plot_field_interactive(self, 
-                            runner="run_tm", 
-                            k_point=mp.Vector3(1 / -3, 1 / 3), 
-                            periods=3, 
-                            resolution=32, 
-                            fig=None,
-                            title='E-field Components Visualization',
-                            colorscale='RdBu'):
+                           runner="run_tm", 
+                           k_point=mp.Vector3(1 / -3, 1 / 3), 
+                           frequency=None,
+                           periods=5, 
+                           resolution=32, 
+                           fig=None,
+                           title="Field Visualization",  # Default main title
+                           colorscale='RdBu'):
         """
         Plot the electric field for a given band and k-point interactively using Plotly with a dropdown menu.
         
@@ -479,38 +480,42 @@ class PhotonicCrystal:
         - periods: The number of periods to extract. Default is 3.
         - resolution: The resolution of the field plot. Default is 32.
         - fig: The Plotly figure to plot on. Default is None.
-        - title: The title of the plot. Default is 'E-field Components Visualization with Dropdown'.
+        - title: The main title of the plot. Defaults to "Field Visualization".
         - colorscale: The colorscale to use for the plot. Default is 'RdBu'.
+        
         """
         fields = []
-        
-
+        freqs = []
         self.set_solver()
         def get_hfields(ms, band):
             fields.append(ms.get_hfield(band, bloch_phase=True))
         def get_efields(ms, band):
             fields.append(ms.get_efield(band, bloch_phase=True))
+        def get_freqs(ms, band):
+            freqs.append(ms.freqs[band-1])
 
+        self.ms.get_freqs
         with suppress_output():
-            if runner=="run_te":
-                self.ms.run_te(mpb.output_at_kpoint(k_point, mpb.fix_hfield_phase, get_hfields))
-                field = "H-field, z-component"
-            elif runner=="run_tm":
-                self.ms.run_tm(mpb.output_at_kpoint(k_point, mpb.fix_efield_phase, get_efields))
-                field = "E-field, z-component"
+            if runner == "run_te":
+                self.ms.run_te(mpb.output_at_kpoint(k_point, mpb.fix_hfield_phase, get_hfields, get_freqs))
+                field_type = "H-field"
+                
+            elif runner == "run_tm":
+                self.ms.run_tm(mpb.output_at_kpoint(k_point, mpb.fix_efield_phase, get_efields, get_freqs))
+                field_type = "E-field"
+                
             else:
                 raise ValueError("Invalid runner. Please enter 'run_te' or 'run_tm'.")
-                
-
+            
             md = self.md
 
             converted = []        
             for f in fields:
-                f = f[..., 0, 2]  # Get just the z component of the efields
+                f = f[..., 0, 2]  # Get just the z component of the fields
                 converted.append(md.convert(f))
 
             eps = md.convert(self.ms.get_epsilon())
-
+        
         num_plots = len(converted)
         if num_plots == 0:
             print("No field data to plot.")
@@ -519,6 +524,9 @@ class PhotonicCrystal:
         if fig is None:
             fig = go.Figure()
 
+        # Automatically generate the subtitle with the k-vector and field type
+        subtitle = f"{field_type}, z-component<br>k = ({k_point.x:.4f}, {k_point.y:.4f})"
+
         # Initialize an empty list for dropdown menu options
         dropdown_buttons = []
 
@@ -526,7 +534,7 @@ class PhotonicCrystal:
         min_eps, max_eps = np.min(eps), np.max(eps)
         midpoint = (min_eps + max_eps) / 2  # The level to be plotted
 
-        for i, f in enumerate(converted):
+        for i, (f, freq) in enumerate(zip(converted, freqs)):
             visible_status = [False] * (2 * num_plots)
             visible_status[2 * i] = True  # Make the current contour (eps) visible
             visible_status[2 * i + 1] = True  # Make the current heatmap (field) visible
@@ -544,15 +552,15 @@ class PhotonicCrystal:
                                     opacity=0.7,
                                     visible=True if i == 0 else False))  # Initially visible only for the first plot
             
-            # Add the heatmap for the real part of the electric field (if required)
+            # Add the heatmap for the real part of the electric field
             fig.add_trace(go.Heatmap(z=np.real(f).T, colorscale=colorscale, zsmooth='best', opacity=0.9,
-                                showscale=False, visible=True if i == 0 else False))
+                                    showscale=False, visible=True if i == 0 else False))
 
             # Create a button for each field dataset for the dropdown
             dropdown_buttons.append(dict(label=f'Mode {i + 1}',
                                         method='update',
                                         args=[{'visible': visible_status},  # Update visibility for both eps and field
-                                            {'title': f"{title}<br>{field} - Mode {i + 1}"}
+                                            {'title':f"{title}<br>Mode {i + 1}, freq={freq:0.3f}: {subtitle}"}
                                         ]))
 
         # Add the dropdown menu to the layout
@@ -561,7 +569,7 @@ class PhotonicCrystal:
                             buttons=dropdown_buttons,
                             x=1.15, y=1.15,  # Positioning the dropdown to the top right
                             xanchor='left', yanchor='top')],
-            title=title,
+            title=f"{title}<br>Mode {1}, freq={freqs[0]:0.3f}: {subtitle}",  # Main title + subtitle
             xaxis_showgrid=False, yaxis_showgrid=False,
             xaxis_zeroline=False, yaxis_zeroline=False,
             xaxis_visible=False, yaxis_visible=False,
@@ -571,6 +579,7 @@ class PhotonicCrystal:
 
         # Display the plot
         return fig
+
 
 
 

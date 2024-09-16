@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Interactive Photonic Crystal Visualization</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script> <!-- Load Plotly -->
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -17,15 +18,14 @@
         #plots-container {
             display: flex;
             flex-direction: column;
-            gap: 20px; /* Add some space between the plot rows */
+            gap: 20px;
         }
         .plot-container {
             width: 100%;
         }
-        iframe {
+        .plot-container div {
             width: 100%;
             height: 500px;
-            border: 1px solid #ddd;
         }
     </style>
 </head>
@@ -38,82 +38,98 @@
         <!-- Options will be populated dynamically -->
     </select>
 
-    <!-- Container to display the epsilon, gaps, and fields plots -->
+    <!-- Container to display the epsilon, bands, and field plots -->
     <div id="plots-container">
-        <div style="display: flex; justify-content: space-between;">
-            <div class="plot-container" style="flex: 1; margin-right: 10px;">
-                <h3>Epsilon Plot</h3>
-                <iframe id="epsilonPlot" src="" title="Epsilon plot will appear here" onload="resizeIframe(this)"></iframe>
-            </div>
-            <div class="plot-container" style="flex: 1; margin-left: 10px;">
-                <h3>Bands Plot</h3>
-                <iframe id="gapsPlot" src="" title="Bands plot will appear here" onload="resizeIframe(this)"></iframe>
-            </div>
+        <div class="plot-container">
+            <h3>Epsilon Plot</h3>
+            <div id="epsilonPlot"></div> <!-- Plotly plot will be rendered here -->
         </div>
-        <div class="plot-container" style="margin-top: 20px;">
+        <div class="plot-container">
+            <h3>Bands Plot</h3>
+            <div id="gapsPlot"></div> <!-- Plotly plot will be rendered here -->
+        </div>
+        <div class="plot-container">
             <h3>Field Plot</h3>
-            <iframe id="fieldPlot" src="" title="Field plot will appear here" onload="resizeIframe(this)"></iframe>
+            <div id="fieldPlot"></div> <!-- Plotly plot will be rendered here -->
         </div>
     </div>
 
     <script>
-        function resizeIframe(iframe) {
-            iframe.style.height = iframe.contentWindow.document.body.scrollHeight + 'px';
+    // Function to fetch IDs from the server
+    async function fetchIds() {
+        try {
+            const response = await fetch('/pics');
+            const files = await response.json();
+            const ids = files
+                .filter(file => file.endsWith('_bands.html'))
+                .map(file => file.replace('_bands.html', ''));
+            return ids;
+        } catch (error) {
+            console.error('Error fetching IDs:', error);
+            return [];
         }
+    }
 
-        // Function to fetch IDs from the server
-        async function fetchIds() {
-            try {
-                const response = await fetch('/pics');
-                const files = await response.json();
-                const ids = files
-                    .filter(file => file.endsWith('_bands.html'))
-                    .map(file => file.replace('_bands.html', ''));
-                return ids;
-            } catch (error) {
-                console.error('Error fetching IDs:', error);
-                return [];
-            }
-        }
+    // Fetch IDs and populate the dropdown on page load
+    window.onload = async function() {
+        const ids = await fetchIds();
+        ids.forEach(id => {
+            const option = document.createElement('option');
+            option.value = id;
+            option.text = id;
+            idDropdown.appendChild(option);
+        });
+    };
 
-        // Fetch IDs and populate the dropdown on page load
-        window.onload = async function() {
-            const ids = await fetchIds();
-            ids.forEach(id => {
-                const option = document.createElement('option');
-                option.value = id;
-                option.text = id;
-                idDropdown.appendChild(option);
+    // Get references to the dropdown and plot div elements
+    const idDropdown = document.getElementById('idDropdown');
+    const epsilonPlot = document.getElementById('epsilonPlot');
+    const gapsPlot = document.getElementById('gapsPlot');
+    const fieldPlot = document.getElementById('fieldPlot');
+
+    // Function to update the plots when an ID is selected
+    function updatePlots() {
+        const selectedId = idDropdown.value;
+
+        // Load epsilon plot and render it using Plotly
+        fetch(`/pics/${selectedId}_epsilon.html`)
+            .then(response => response.text())  // Fetch the HTML content as text
+            .then(html => {
+                const plotData = extractPlotData(html);
+                Plotly.newPlot(epsilonPlot, plotData.data, plotData.layout);
             });
-        };
 
-        // Get references to the dropdown and iframe elements
-        const idDropdown = document.getElementById('idDropdown');
-        const epsilonPlot = document.getElementById('epsilonPlot');
-        const gapsPlot = document.getElementById('gapsPlot');
-        const fieldPlot = document.getElementById('fieldPlot');
+        // Load bands plot and render it using Plotly
+        fetch(`/pics/${selectedId}_bands.html`)
+            .then(response => response.text())  // Fetch the HTML content as text
+            .then(html => {
+                const plotData = extractPlotData(html);
+                Plotly.newPlot(gapsPlot, plotData.data, plotData.layout);
 
-        // Function to update the plots when an ID is selected
-        function updatePlots() {
-            const selectedId = idDropdown.value;
-            epsilonPlot.src = `pics/${selectedId}_epsilon.html`;
-            gapsPlot.src = `pics/${selectedId}_bands.html`;
-            fieldPlot.src = `pics/${selectedId}_field.html`; // Load the initial field plot
-
-            // Add a click event listener to the bands plot to update the field plot based on the clicked k-point
-            gapsPlot.onload = function() {
-                gapsPlot.contentWindow.document.addEventListener('plotly_click', function(event) {
+                // Attach event listener after the plot is fully rendered
+                gapsPlot.on('plotly_click', function(event) {
                     const clickedKPoint = event.points[0].customdata;  // Get the k-point from the clicked data
+                    const kPointString = JSON.stringify(clickedKPoint);
+
                     // Fetch the field plot corresponding to the clicked k-point
-                    fetch(`/plot_mode?k_point=${JSON.stringify(clickedKPoint)}&id=${selectedId}`)
+                    fetch(`/plot_mode?k_point=${encodeURIComponent(kPointString)}&id=${selectedId}`)
                         .then(response => response.json())
                         .then(data => {
-                            fieldPlot.src = `data:text/html;base64,${data.fieldHtml}`;
+                            const fieldPlotData = extractPlotData(data.fieldHtml);
+                            Plotly.newPlot(fieldPlot, fieldPlotData.data, fieldPlotData.layout);
                         })
                         .catch(error => console.error('Error fetching field plot:', error));
                 });
-            };
-        }
+            });
+    }
+
+    // Function to extract Plotly plot data from HTML content
+    function extractPlotData(html) {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        const script = div.querySelector('script[type="application/json"]');
+        return JSON.parse(script.textContent);
+    }
     </script>
 
 </body>
