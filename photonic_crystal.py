@@ -311,6 +311,7 @@ class PhotonicCrystal:
                 text=hover_texts,  # Custom hover text
                 hoverinfo='text',  # Display only the custom hover text
                 customdata=[(kp.x, kp.y, kp.z) for kp in k_points_interpolated],  # Attach k-points as custom data (vector components)
+                showlegend=False  # Hide from legend
             ))
 
         # Add bandgap shading
@@ -327,6 +328,14 @@ class PhotonicCrystal:
                     line_width=0
                 )
 
+        # Add legend entries for each polarization
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None],
+            mode='lines',
+            line=dict(color=color),
+            name=f'{polarization.upper()} polarization'
+        ))
+
         # Customize the x-axis with the high symmetry points
         k_high_sym = self.get_high_symmetry_points()
         fig.update_layout(
@@ -337,7 +346,7 @@ class PhotonicCrystal:
                 ticktext=list(k_high_sym.keys())
             ),
             yaxis_title='frequency (c/a)',
-            showlegend=False
+            showlegend=True
         )
         
         # Add a JavaScript callback to handle clicks
