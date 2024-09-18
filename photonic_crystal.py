@@ -341,9 +341,9 @@ class PhotonicCrystal:
         fig.update_layout(
             title=title,
             xaxis=dict(
-                tickmode='array',
-                tickvals=[i * (len(freqs) - 4) / 3 + i for i in range(4)],
-                ticktext=list(k_high_sym.keys())
+            tickmode='array',
+            tickvals=[i * (len(freqs) - 4) / 3 + i for i in range(4)],
+            ticktext=list(k_high_sym.keys()) + [list(k_high_sym.keys())[0]]  # Repeat the first element at the end
             ),
             yaxis_title='frequency (c/a)',
             showlegend=True
