@@ -37,8 +37,11 @@ class PhotonicCrystal:
 
         self.ms = None
         self.md = None
+
         self.freqs = {}
         self.gaps = {}
+        self.epsilon = None
+        self.fields ={}
 
     def pickle_photonic_crystal(self, pickle_id):
         with open(f"{pickle_id}.pkl", "wb") as f:
@@ -97,7 +100,19 @@ class PhotonicCrystal:
                 getattr(self.ms, runner_2)()
                 self.freqs[polarization_2] = self.ms.all_freqs
                 self.gaps[polarization_2]  = self.ms.gap_list
-    
+
+    def run_dumb_simulation(self):
+        """
+        Run a dumb simulation. Mainly used in  
+        """
+        self.ms = mpb.ModeSolver(geometry=self.geometry,
+                                  geometry_lattice=self.geometry_lattice,
+                                  k_points=[mp.Vector3()],
+                                  resolution=self.resolution,
+                                  num_bands=1)
+        
+        self.ms.run()
+                
     def extract_data(self, periods: int | None = 5):
         """
         Extract the data from the simulation.
@@ -256,14 +271,17 @@ class Crystal2D(PhotonicCrystal):
         
 
 
-    def plot_epsilon_interactive(self, fig=None, title='Epsilon'):
+    def plot_epsilon_interactive(self, fig=None, title='Epsilon', **kwargs):
         """
         Plot the epsilon values obtained from the simulation interactively using Plotly.
         """
         with suppress_output():
-            if self.md is None:
-                raise ValueError("Data not extracted. Call extract_data() before plotting epsilon.")
-            converted_eps = self.md.convert(self.ms.get_epsilon())
+            if self.epsilon is None:
+                
+                md = mpb.MPBData(rectify=True, periods=self.periods, resolution=self.resolution)
+                converted_eps = md.convert(self.ms.get_epsilon())
+            else:
+                converted_eps = self.epsilon
             if fig is None:
                 fig = go.Figure()
 
@@ -283,8 +301,10 @@ class Crystal2D(PhotonicCrystal):
                 yaxis_zeroline=False,
                 xaxis_visible=False, 
                 yaxis_visible=False
-            )           
-            return fig
+            )       
+        self.epsilon = converted_eps
+        print(self.epsilon)    
+        return fig
         
 
     
@@ -489,9 +509,9 @@ class Crystal2D(PhotonicCrystal):
 class CrystalSlab(PhotonicCrystal):
     def __init__(self,
                 lattice_type = None,
-                num_bands: int = 6,
-                resolution: tuple[int, int] | int = (32,32,64),
-                interp: int =4,
+                num_bands: int = 4,
+                resolution = mp.Vector3(32,32,16),
+                interp: int =2,
                 periods: int =3, 
                 pickle_id = None,
                 geometry = None):
@@ -502,55 +522,75 @@ class CrystalSlab(PhotonicCrystal):
         self.geometry = geometry if geometry is not None else self.basic_geometry()
         self.k_points_interpolated = mp.interpolate(interp, self.k_points)
 
-    def plot_epsilon_interactive(self, fig=None, title='Epsilon'):
+    def plot_epsilon_interactive(self, 
+                                 fig=None, 
+                                 title='Epsilon', 
+                                 opacity=0.3, 
+                                 colorscale='PuBuGn', 
+                                 override_resolution_with: None|int= None, 
+                                 periods = 1):
         """
         Plot the epsilon values obtained from the simulation interactively using Plotly.
         """
-        with suppress_output():
-            if self.md is None:
-                raise ValueError("Data not extracted. Call extract_data() before plotting epsilon.")
-            converted_eps = self.md.convert(self.ms.get_epsilon())
-            if fig is None:
-                fig = go.Figure()
 
-            epsilon = np.array(converted_eps)  # If epsilon is an MPBArray, convert it to a NumPy array
+        if self.epsilon is None:
+            
+            if override_resolution_with is None:
+                resolution = self.resolution
+            else:
+                resolution = override_resolution_with
+            md = mpb.MPBData(rectify=True, periods=1, resolution=resolution)
+            
+            converted_eps = md.convert(self.ms.get_epsilon())
+        else:
+            converted_eps = self.epsilon
+        self.epsilon = converted_eps
+        if fig is None:
+            fig = go.Figure()
 
-            # Create indices for x, y, z axes (meshgrid)
-            x, y, z = np.meshgrid(np.arange(epsilon.shape[0]),
-                                np.arange(epsilon.shape[1]),
-                                np.arange(epsilon.shape[2]))
+        epsilon = np.array(converted_eps)  # If epsilon is an MPBArray, convert it to a NumPy array
 
-            # Flatten the arrays for Plotly
-            x_flat = x.flatten()
-            y_flat = y.flatten()
-            z_flat = z.flatten()
-            epsilon_flat = epsilon.flatten()
+        # Replicate the epsilon array along x and y axes using self.periods
+        epsilon = np.tile(epsilon, (periods, periods, 1))
 
-            # Get the minimum and maximum values from the epsilon array (ensure they are floats)
-            isomin_value = float(np.min(epsilon_flat))
-            isomax_value = float(np.max(epsilon_flat))
+        # Create indices for x, y, z axes (meshgrid)
+        x, y, z = np.meshgrid(np.arange(epsilon.shape[0]),
+                            np.arange(epsilon.shape[1]),
+                            np.arange(epsilon.shape[2]))
 
-            # Create the 3D volume plot using Plotly
-            fig = go.Figure(data=go.Volume(
-                x=x_flat, y=y_flat, z=z_flat,
-                value=epsilon_flat,  # Use the dielectric function values
-                isomin=isomin_value,
-                isomax=isomax_value,
-                opacity=0.1,  # Adjust opacity to visualize internal structure
-                surface_count=20,  # Number of surfaces to display
-                colorscale='Viridis',  # Color scale for the dielectric function
-                colorbar=dict(title='Dielectric Constant')
-            ))
+        # Flatten the arrays for Plotly
+        x_flat = x.flatten()
+        y_flat = y.flatten()
+        z_flat = z.flatten()
+        epsilon_flat = epsilon.flatten()
 
-            # Add layout details
-            fig.update_layout(
-                title='3D Volume Plot of Dielectric Function',
-                scene=dict(
-                    xaxis=dict(visible=False),
-                    yaxis=dict(visible=False),
-                    zaxis=dict(visible=False),
-                )
+        # Get the minimum and maximum values from the epsilon array (ensure they are floats)
+        isomin_value = float(np.min(epsilon_flat))
+        isomax_value = float(np.max(epsilon_flat))
+
+        # Create the 3D volume plot using Plotly
+        fig = go.Figure(data=go.Volume(
+            x=x_flat, y=y_flat, z=z_flat,
+            value=epsilon_flat,  # Use the dielectric function values
+            isomin=isomin_value,
+            isomax=isomax_value,
+            opacity=opacity,  # Adjust opacity to visualize internal structure
+            surface_count=20,  # Number of surfaces to display
+            colorscale=colorscale,  # Color scale for the dielectric function
+            colorbar=dict(title='Dielectric Constant')
+        ))
+
+        # Add layout details
+        fig.update_layout(
+            title='3D Volume Plot of Dielectric Function',
+            scene=dict(
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                zaxis=dict(visible=False),
             )
+        )
+
+        return fig
 
     @staticmethod
     def basic_lattice(lattice_type='square', height_supercell=4):
@@ -609,85 +649,104 @@ class CrystalSlab(PhotonicCrystal):
                        eps_bulk = 12,
                        height_supercell=4, 
                        height_slab=0.5,
-                       eps_background=12,
+                       eps_background=1,
+                       eps_substrate=None,
                        ):
-        geometry = [
+        
+        geometry = []
+        
+        #background
+        geometry.append(
             mp.Block(
                 size = mp.Vector3(mp.inf, mp.inf, height_supercell),
                 material=mp.Medium(epsilon=eps_background)),
+            
+        )
+        
+        #substrate
+        if eps_substrate is not None:
+            geometry.append(mp.Block(
+                size = mp.Vector3(mp.inf, mp.inf, height_supercell*0.5),
+                center = mp.Vector3(0, 0, -height_supercell*0.25),
+                material=mp.Medium(epsilon=eps_substrate)))
+
+        
+        #slab
+        geometry.append(
             mp.Block(
                 size = mp.Vector3(mp.inf, mp.inf, height_slab),
-                material=mp.Medium(epsilon=eps_bulk),
-                center = mp.Vector3(0,0,0.5*height_supercell))
-            ]
+                material=mp.Medium(epsilon=eps_bulk)),
+        )
+
+        #atoms    
         if radius_2 is None:
             geometry.append(mp.Cylinder(radius_1, 
                                         material=mp.Medium(epsilon=eps_atom_1),
-                                        center = mp.Vector3(0,0, 0.5*height_supercell),
                                         height=height_slab))
+                
             
         else:
             geometry.append(mp.Cylinder(radius_1, 
                                         material=mp.Medium(epsilon=eps_atom_1),
-                                        center = mp.Vector3(-0.5,-0.5, 0.5*height_supercell),
                                         height=height_slab))
             geometry.append(mp.Cylinder(radius_2, 
                                         material=mp.Medium(epsilon=eps_atom_2),
-                                        center = mp.Vector3(.5,.5, 0.5*height_supercell),
                                         height=height_slab))
+        
         return geometry
 
 
 
 #%%
-
-
 def main():
+    pass
+
+def test_slab():
     #%%
-    from photonic_crystal2 import Crystal2D
+    
+    from photonic_crystal2 import CrystalSlab
+    
+    
 
     # Define basic parameters
-    geometry = Crystal2D.basic_geometry(radius_1=0.35, eps_atom_1=1, eps_bulk=12)
-    lattice, k_points = Crystal2D.square_lattice()
+    geometry = CrystalSlab.basic_geometry(radius_1=0.35, eps_atom_1=1, eps_bulk=12, eps_background=1, eps_substrate=1.45**2)
     num_bands = 4
-    resolution = 32
-    interp = 10
+    resolution = mp.Vector3(32, 32, 16)
+    interp = 2
     periods = 5
     lattice_type = 'square'
-    pickle_id = 'test_crystal'
+    pickle_id = 'test_crystal_slab'
 
-    # Create an instance of the crystal2D class
-    crystal = Crystal2D(lattice_type=lattice_type, 
-                        num_bands=num_bands, 
-                        resolution=resolution, 
-                        interp=interp, 
-                        periods=periods, 
-                        pickle_id=pickle_id,
-                        geometry=geometry)
+    # Create an instance of the CrystalSlab class
+    crystal_slab = CrystalSlab(lattice_type=lattice_type, 
+                                num_bands=num_bands, 
+                                resolution=resolution, 
+                                interp=interp, 
+                                periods=periods, 
+                                pickle_id=pickle_id,
+                                geometry=geometry)
 
-    # Set the solver
-    crystal.set_solver()
-
-    # Run the simulation
-    crystal.run_simulation("run_tm")
-    crystal.run_simulation("run_te")
-
+    crystal_slab.run_dumb_simulation()
+    print("dummy simulation runned")
     # Extract data
-    crystal.extract_data()
+
+    crystal_slab.extract_data(periods=1)
+    print("data extracted")
 
     # Plot epsilon interactively
-    fig_eps = crystal.plot_epsilon_interactive()
+    print("start plotting")
+    fig_eps = crystal_slab.plot_epsilon_interactive(colorscale = "matter", 
+                                                              opacity=0.2,
+                                                              override_resolution_with=16, 
+                                                              periods = 2)
+    print("ready to show")
+    
     fig_eps.show()
 
-    # Plot bands interactively
-    fig_bands = crystal.plot_bands_interactive(polarization="tm", color="blue")
-    crystal.plot_bands_interactive(polarization="te", color="red", fig=fig_bands)
-    fig_bands.show()
+    
 
-    # Plot field interactively
-
-    fig_field = crystal.plot_field_interactive()
-    fig_field.show()
+ 
+    
     #%%
 
 if __name__ == "__main__":
