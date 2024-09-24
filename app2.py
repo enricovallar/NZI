@@ -465,34 +465,26 @@ def update_field_plots(clickData, crystal_type, lattice_type, radius, epsilon_bu
 
     # Extract the clicked point data
     point = clickData['points'][0]
-    kx = point['x']
-    ky = point['y']
+    band_index = point['curveNumber']
+    k_index = point['pointIndex']
+    global crystal_active, configuration_active
+    if crystal_active is None:
+        if crystal_type == '2d':
+            geometry = Crystal2D.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk)
+            crystal_active = Crystal2D(lattice_type=lattice_type, geometry=geometry)
+        elif crystal_type == 'slab':
+            geometry = CrystalSlab.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk, eps_background=epsilon_background, height_slab=height_slab, height_supercell=height_supercell)
+            crystal_active = CrystalSlab(lattice_type=lattice_type, geometry=geometry)
+        else:
+            empty_fig = go.Figure().update_layout(title="Invalid crystal type selected.", width=700, height=700)
+            return empty_fig, empty_fig
 
-    if crystal_type == '2d':
-        geometry = Crystal2D.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk)
-        crystal = Crystal2D(lattice_type=lattice_type, geometry=geometry)
-        crystal.set_solver()
-        crystal.run_simulation("run_tm")
-        crystal.run_simulation("run_te")
-        crystal.extract_data()
-        te_field_fig = crystal.plot_field_interactive(kx=kx, ky=ky, polarization="te")
-        tm_field_fig = crystal.plot_field_interactive(kx=kx, ky=ky, polarization="tm")
-        return te_field_fig, tm_field_fig
+    k_point = crystal_active.k_points_interpolated[k_index]
 
-    elif crystal_type == 'slab':
-        geometry = CrystalSlab.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk, eps_background=epsilon_background, height_slab=height_slab, height_supercell=height_supercell)
-        crystal = CrystalSlab(lattice_type=lattice_type, geometry=geometry)
-        crystal.set_solver()
-        crystal.run_simulation("run_tm")
-        crystal.run_simulation("run_te")
-        crystal.extract_data()
-        te_field_fig = crystal.plot_field_interactive(kx=kx, ky=ky, polarization="te")
-        tm_field_fig = crystal.plot_field_interactive(kx=kx, ky=ky, polarization="tm")
-        return te_field_fig, tm_field_fig
+    te_field_fig = crystal_active.plot_field_interactive(runner="run_te", k_point=k_point, periods=5)
+    tm_field_fig = crystal_active.plot_field_interactive(runner="run_tm", k_point=k_point, periods=5)
 
-    else:
-        empty_fig = go.Figure().update_layout(title="Invalid crystal type selected.", width=700, height=700)
-        return empty_fig, empty_fig
+    return te_field_fig, tm_field_fig
 
 if __name__ == '__main__':
     app.run(debug=True)
