@@ -155,7 +155,7 @@ class PhotonicCrystal:
         
                     
 
-    def extract_data(self, periods: int | None = None):
+    def extract_data(self, periods: int | None = 5):
         """
         Extract the data from the simulation.
         
@@ -379,20 +379,60 @@ class PhotonicCrystal:
 
         
     @staticmethod
-    def basic_geometry(radius=0.2, eps=12):
+    def basic_geometry(radius_1=0.2, eps_block = 12,  eps_atom_1=1, radius_2=None, eps_atom_2=None,  height=1):
         """
         Define the basic geometry of the photonic crystal.
         
         Returns:
         - geometry: A list of geometric objects representing the crystal structure.
         """
+        if radius_2 is None:
+            radius_2 = radius_1 
+        if eps_atom_2 is None:
+            eps_atom_2 = eps_atom_1
+        if height==0.0:
+            height=mp.inf
+        
         geometry = [
-            mp.Cylinder(radius=radius, material=mp.Medium(epsilon=eps)),
+            mp.Block(mp.Vector3(mp.inf, mp.inf, height), material=mp.Medium(epsilon=eps_block), center=mp.Vector3(0, 0)),
+            mp.Cylinder(radius=radius_1, material=mp.Medium(epsilon=eps_atom_1), center=mp.Vector3(0, 0)),
         ]
         return geometry
     
     @staticmethod
-    def square_lattice():
+    def slab_geometry(slab_h=1, 
+                      supercell_h=4,
+                      eps_sub=12,
+                      eps_atom_1=1,
+                      eps_atom_2=1,
+                      eps_background = 1,
+                      radius_1=0.2,
+                      radius_2=0.2
+    ):
+        
+        """
+        Define the slab geometry for the photonic crystal.
+        
+        Returns:
+        - geometry: A list of geometric objects representing the slab structure.
+        """
+        geometry = [
+            #background
+            mp.Block(material = mp.Medium(epsilon=eps_background),
+                     center = mp.Vector3(0, 0,0.5*supercell_h),
+                     size = mp.Vector3(mp.inf, mp.inf, supercell_h)),
+            #slab
+            mp.Block(material = mp.Medium(epsilon=eps_sub),
+                    center = mp.Vector3(0, 0, 0.5*supercell_h),
+                    size = mp.Vector3(mp.inf, mp.inf, slab_h)),
+            #atoms
+            mp.Cylinder(radius=radius_1, material=mp.Medium(epsilon=eps_atom_1), height=supercell_h, center=mp.Vector3(0, 0)),
+            mp.Cylinder(radius=radius_2, material=mp.Medium(epsilon=eps_atom_2), height=supercell_h, center=mp.Vector3(0, 0)),
+        ]
+        return geometry
+                    
+    @staticmethod
+    def square_lattice(supercell_h=4):
         """
         Define the square lattice for the photonic crystal.
         
@@ -400,7 +440,7 @@ class PhotonicCrystal:
         - lattice: The lattice object representing the square lattice.
         - k_points: A list of k-points for the simulation.
         """
-        lattice = mp.Lattice(size=mp.Vector3(1, 1),
+        lattice = mp.Lattice(size=mp.Vector3(1, 1, supercell_h),
                           basis1=mp.Vector3(1, 0),
                           basis2=mp.Vector3(0, 1))
         k_points = [
@@ -412,7 +452,7 @@ class PhotonicCrystal:
         return lattice, k_points
 
     @staticmethod
-    def triangular_lattice():
+    def triangular_lattice(supercell_h = 4):
         """
         Define the triangular lattice for the photonic crystal.
         
@@ -420,7 +460,7 @@ class PhotonicCrystal:
         - lattice: The lattice object representing the triangular lattice.
         - k_points: A list of k-points for the simulation.
         """
-        lattice = mp.Lattice(size=mp.Vector3(1, 1),
+        lattice = mp.Lattice(size=mp.Vector3(1, 1, supercell_h),
                           basis1=mp.Vector3(1, 0),
                           basis2=mp.Vector3(0.5, math.sqrt(3)/2))
         k_points = [
@@ -667,6 +707,8 @@ if __name__ == "__main__":
     #%%
     # Plot epsilon interactively using Plotly
     converted_eps0 = pc0.plot_epsilon_interactive(title='Square Lattice', fig=fig0)
+    print("Shape of converted_eps0:", converted_eps0.shape)
+    fig0.show()
     converted_eps1 = pc1.plot_epsilon_interactive(title='Triangular Lattice', fig=fig1) 
     #%%
     # Plot bands interactively using Plotly
@@ -700,7 +742,8 @@ if __name__ == "__main__":
     fig4.write_html('pics/square_lattice_field.html')
     fig5.write_html('pics/triangular_lattice_field.html')
     
-  
+
+     
     
 
      
