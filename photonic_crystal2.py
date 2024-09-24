@@ -480,10 +480,162 @@ class Crystal2D(PhotonicCrystal):
             mp.Vector3(),               # Gamma
         ]
         return lattice, k_points
+    
+       
+    
+    
 
 
-class Crystal_slab(PhotonicCrystal):
-    pass
+class CrystalSlab(PhotonicCrystal):
+    def __init__(self,
+                lattice_type = None,
+                num_bands: int = 6,
+                resolution: tuple[int, int] | int = (32,32,64),
+                interp: int =4,
+                periods: int =3, 
+                pickle_id = None,
+                geometry = None):
+        super().__init__(lattice_type, num_bands, resolution, interp, periods, pickle_id)
+        
+        
+        self.geometry_lattice, self.k_points = self.basic_lattice(lattice_type)
+        self.geometry = geometry if geometry is not None else self.basic_geometry()
+        self.k_points_interpolated = mp.interpolate(interp, self.k_points)
+
+    def plot_epsilon_interactive(self, fig=None, title='Epsilon'):
+        """
+        Plot the epsilon values obtained from the simulation interactively using Plotly.
+        """
+        with suppress_output():
+            if self.md is None:
+                raise ValueError("Data not extracted. Call extract_data() before plotting epsilon.")
+            converted_eps = self.md.convert(self.ms.get_epsilon())
+            if fig is None:
+                fig = go.Figure()
+
+            epsilon = np.array(converted_eps)  # If epsilon is an MPBArray, convert it to a NumPy array
+
+            # Create indices for x, y, z axes (meshgrid)
+            x, y, z = np.meshgrid(np.arange(epsilon.shape[0]),
+                                np.arange(epsilon.shape[1]),
+                                np.arange(epsilon.shape[2]))
+
+            # Flatten the arrays for Plotly
+            x_flat = x.flatten()
+            y_flat = y.flatten()
+            z_flat = z.flatten()
+            epsilon_flat = epsilon.flatten()
+
+            # Get the minimum and maximum values from the epsilon array (ensure they are floats)
+            isomin_value = float(np.min(epsilon_flat))
+            isomax_value = float(np.max(epsilon_flat))
+
+            # Create the 3D volume plot using Plotly
+            fig = go.Figure(data=go.Volume(
+                x=x_flat, y=y_flat, z=z_flat,
+                value=epsilon_flat,  # Use the dielectric function values
+                isomin=isomin_value,
+                isomax=isomax_value,
+                opacity=0.1,  # Adjust opacity to visualize internal structure
+                surface_count=20,  # Number of surfaces to display
+                colorscale='Viridis',  # Color scale for the dielectric function
+                colorbar=dict(title='Dielectric Constant')
+            ))
+
+            # Add layout details
+            fig.update_layout(
+                title='3D Volume Plot of Dielectric Function',
+                scene=dict(
+                    xaxis=dict(visible=False),
+                    yaxis=dict(visible=False),
+                    zaxis=dict(visible=False),
+                )
+            )
+
+    @staticmethod
+    def basic_lattice(lattice_type='square', height_supercell=4):
+        if lattice_type == 'square':
+            return CrystalSlab.square_lattice()
+        elif lattice_type == 'triangular':
+            return CrystalSlab.triangular_lattice()
+        else:
+            raise ValueError("Invalid lattice type. Choose 'square' or 'triangular'.")
+        
+    @staticmethod
+    def square_lattice(height_supercell=4):
+        """
+        Define the square lattice for the photonic crystal.
+        
+        Returns:
+        - lattice: The lattice object representing the square lattice.
+        - k_points: A list of k-points for the simulation.
+        """
+        lattice = mp.Lattice(size=mp.Vector3(1, 1, height_supercell),
+                          basis1=mp.Vector3(1, 0),
+                          basis2=mp.Vector3(0, 1))
+        k_points = [
+            mp.Vector3(),               # Gamma
+            mp.Vector3(y=0.5),          # M
+            mp.Vector3(0.5, 0.5),       # X
+            mp.Vector3(),               # Gamma
+        ]
+        return lattice, k_points
+
+    @staticmethod
+    def triangular_lattice(height_supercell=4):
+        """
+        Define the triangular lattice for the photonic crystal.
+        
+        Returns:
+        - lattice: The lattice object representing the triangular lattice.
+        - k_points: A list of k-points for the simulation.
+        """
+        lattice = mp.Lattice(size=mp.Vector3(1, 1, height_supercell),
+                          basis1=mp.Vector3(1, 0),
+                          basis2=mp.Vector3(0.5, math.sqrt(3)/2))
+        k_points = [
+            mp.Vector3(),               # Gamma
+            mp.Vector3(y=0.5),          # K
+            mp.Vector3(-1./3, 1./3),    # M
+            mp.Vector3(),               # Gamma
+        ]
+        return lattice, k_points
+    
+    @staticmethod
+    def basic_geometry(radius_1=0.2,  
+                       eps_atom_1=1, 
+                       radius_2=None, 
+                       eps_atom_2=None,
+                       eps_bulk = 12,
+                       height_supercell=4, 
+                       height_slab=0.5,
+                       eps_background=12,
+                       ):
+        geometry = [
+            mp.Block(
+                size = mp.Vector3(mp.inf, mp.inf, height_supercell),
+                material=mp.Medium(epsilon=eps_background)),
+            mp.Block(
+                size = mp.Vector3(mp.inf, mp.inf, height_slab),
+                material=mp.Medium(epsilon=eps_bulk),
+                center = mp.Vector3(0,0,0.5*height_supercell))
+            ]
+        if radius_2 is None:
+            geometry.append(mp.Cylinder(radius_1, 
+                                        material=mp.Medium(epsilon=eps_atom_1),
+                                        center = mp.Vector3(0,0, 0.5*height_supercell),
+                                        height=height_slab))
+            
+        else:
+            geometry.append(mp.Cylinder(radius_1, 
+                                        material=mp.Medium(epsilon=eps_atom_1),
+                                        center = mp.Vector3(-0.5,-0.5, 0.5*height_supercell),
+                                        height=height_slab))
+            geometry.append(mp.Cylinder(radius_2, 
+                                        material=mp.Medium(epsilon=eps_atom_2),
+                                        center = mp.Vector3(.5,.5, 0.5*height_supercell),
+                                        height=height_slab))
+        return geometry
 
 
 
