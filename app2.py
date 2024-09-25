@@ -83,11 +83,25 @@ app.layout = dbc.Container([
 ])
 
 
-def switch_configurator(crystal_type):
+def switch_configurator(crystal_type, configuration=None):
+    default_values = {
+        'crystal_id': 'crystal_1',
+        'lattice_type': 'square',
+        'radius': 0.35,
+        'epsilon_bulk': 12,
+        'epsilon_atom': 1,
+        'epsilon_background': 1,
+        'height_slab': 0.5,
+        'height_supercell': 4
+    }
+
+    if configuration is not None:
+        default_values = configuration
+
     common_inputs = [
         dbc.Row([
             dbc.Col(html.Label("Crystal ID"), width=4),
-            dbc.Col(dcc.Input(id='crystal-id-input', type='text', value='crystal_1', placeholder='Enter Crystal ID'), width=8),
+            dbc.Col(dcc.Input(id='crystal-id-input', type='text', value=default_values['crystal_id'], placeholder='Enter Crystal ID'), width=8),
         ], style={'margin-bottom': '10px'}),
         
         dbc.Row([
@@ -98,23 +112,23 @@ def switch_configurator(crystal_type):
                     {'label': 'Square', 'value': 'square'},
                     {'label': 'Triangular', 'value': 'triangular'}
                 ],
-                value='square',  # Default to square
+                value=default_values['lattice_type'],  # Default to square
             ), width=8),
         ], style={'margin-bottom': '10px'}),
         
         dbc.Row([
             dbc.Col(html.Label("Radius"), width=4),
-            dbc.Col(dcc.Input(id='radius-input', type='number', value=0.35, step=0.01), width=8),
+            dbc.Col(dcc.Input(id='radius-input', type='number', value=default_values['radius'], step=0.01), width=8),
         ], style={'margin-bottom': '10px'}),
         
         dbc.Row([
             dbc.Col(html.Label("Epsilon (Bulk Material)"), width=4),
-            dbc.Col(dcc.Input(id='epsilon-bulk-input', type='number', value=12, step=0.1), width=8),
+            dbc.Col(dcc.Input(id='epsilon-bulk-input', type='number', value=default_values['epsilon_bulk'], step=0.1), width=8),
         ], style={'margin-bottom': '10px'}),
         
         dbc.Row([
             dbc.Col(html.Label("Epsilon (Atom)"), width=4),
-            dbc.Col(dcc.Input(id='epsilon-atom-input', type='number', value=1, step=0.1), width=8),
+            dbc.Col(dcc.Input(id='epsilon-atom-input', type='number', value=default_values['epsilon_atom'], step=0.1), width=8),
         ], style={'margin-bottom': '10px'}),
     ]
 
@@ -122,34 +136,34 @@ def switch_configurator(crystal_type):
         return common_inputs + [
             dbc.Row([
                 dbc.Col(html.Label("Epsilon (Background)"), width=4),
-                dbc.Col(dcc.Input(id='epsilon-background-input', type='number', value=1, step=0.1), width=8),
+                dbc.Col(dcc.Input(id='epsilon-background-input', type='number', value=default_values['epsilon_background'], step=0.1), width=8),
             ], style={'display': 'none'}),  # Hide these inputs for 2D crystal
             
             dbc.Row([
                 dbc.Col(html.Label("Height (Slab)"), width=4),
-                dbc.Col(dcc.Input(id='height-slab-input', type='number', value=0.5, step=0.01), width=8),
+                dbc.Col(dcc.Input(id='height-slab-input', type='number', value=default_values['height_slab'], step=0.01), width=8),
             ], style={'display': 'none'}),  # Hide these inputs for 2D crystal
             
             dbc.Row([
                 dbc.Col(html.Label("Height (Supercell)"), width=4),
-                dbc.Col(dcc.Input(id='height-supercell-input', type='number', value=4, step=0.1), width=8),
+                dbc.Col(dcc.Input(id='height-supercell-input', type='number', value=default_values['height_supercell'], step=0.1), width=8),
             ], style={'display': 'none'})  # Hide these inputs for 2D crystal
         ]
     elif crystal_type == 'slab':
         return common_inputs + [
             dbc.Row([
                 dbc.Col(html.Label("Epsilon (Background)"), width=4),
-                dbc.Col(dcc.Input(id='epsilon-background-input', type='number', value=1, step=0.1), width=8),
+                dbc.Col(dcc.Input(id='epsilon-background-input', type='number', value=default_values['epsilon_background'], step=0.1), width=8),
             ], style={'margin-bottom': '10px'}),
             
             dbc.Row([
                 dbc.Col(html.Label("Height (Slab)"), width=4),
-                dbc.Col(dcc.Input(id='height-slab-input', type='number', value=0.5, step=0.01), width=8),
+                dbc.Col(dcc.Input(id='height-slab-input', type='number', value=default_values['height_slab'], step=0.01), width=8),
             ], style={'margin-bottom': '10px'}),
             
             dbc.Row([
                 dbc.Col(html.Label("Height (Supercell)"), width=4),
-                dbc.Col(dcc.Input(id='height-supercell-input', type='number', value=4, step=0.1), width=8),
+                dbc.Col(dcc.Input(id='height-supercell-input', type='number', value=default_values['height_supercell'], step=0.1), width=8),
             ], style={'margin-bottom': '10px'}),
         ]
     else:
@@ -240,12 +254,13 @@ def save_crystal(n_clicks, crystal_id, crystal_type, lattice_type, radius, epsil
 
     data = {
         'crystal': crystal_active,
-        'configuration': configuration_active
+        'configuration': configuration_active,
+        'active_crystal_has_been_run': active_crystal_has_been_run
     }
     serialized_data = pickle.dumps(data)
     filename = f"{crystal_id}.pkl" if crystal_id else "crystal.pkl"
 
-    return dcc.send_bytes(serialized_data, filename), f"Crystal configuration saved successfully as {filename}."
+    return dcc.send_bytes(serialized_data, filename), f"Crystal configuration saved successfully as {filename}. Please choose where to download the file."
 
 
 # Callback to load the active crystal and configuration using dcc.Upload.
@@ -271,16 +286,19 @@ def load_crystal(contents, filename):
 
     global crystal_active, configuration_active, active_crystal_has_been_run
 
-    content_type, content_string = contents.split(',')
+    content_string = contents.split(',')[1]
     decoded = base64.b64decode(content_string)
     data = pickle.loads(decoded)
     crystal_active = data['crystal']
     configuration_active = data['configuration']
-
+    active_crystal_has_been_run = data['active_crystal_has_been_run']
+    
+    print("Loaded the following data")
     print(configuration_active)
     print(crystal_active)
+    print(f"runned before?{active_crystal_has_been_run}")
 
-    configurator_children = switch_configurator(configuration_active['crystal_type'])
+    configurator_children = switch_configurator(configuration_active['crystal_type'], configuration_active)
 
     return (f"Crystal configuration loaded successfully from {filename}.",
             configuration_active['crystal_id'],
