@@ -43,6 +43,19 @@ class PhotonicCrystal:
         self.epsilon = None
         self.fields ={}
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Exclude the non-picklable SWIG objects
+        state['ms'] = None
+        state['md'] = None
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # You may want to reinitialize 'ms' and 'md' if needed after loading.
+        self.ms = None
+        self.md = None
+
     def pickle_photonic_crystal(self, pickle_id):
         with open(f"{pickle_id}.pkl", "wb") as f:
             pickle.dump(self, f)

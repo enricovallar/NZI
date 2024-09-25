@@ -40,11 +40,12 @@ app.layout = dbc.Container([
         ])),
     ], className="mt-4"),
 
-    # Buttons to update, save, and load the crystal
+    # Buttons to save and load the crystal
     dbc.Row([
-        dbc.Col(dbc.Button("Update Crystal", id="update-crystal-button", color="secondary", className="mr-2"), width={"size": 4}),
-        dbc.Col(dbc.Button("Save Crystal", id="save-crystal-button", color="secondary", className="mr-2"), width={"size": 4}),
-        dbc.Col(dbc.Button("Load Crystal", id="load-crystal-button", color="secondary", className="mr-2"), width={"size": 4}),
+        dbc.Col(dcc.Upload(id='upload-crystal', children=dbc.Button("Load Crystal", color="secondary")), width={"size": 4}),
+        dbc.Col(dbc.Button("Save Crystal", id="save-crystal-button", color="secondary"), width={"size": 4}),
+        dbc.Col(dbc.Button("Update Crystal", id="update-crystal-button", color="secondary"), width={"size": 4}),
+        dcc.Download(id="download-crystal")
     ], className="mt-3"),
 
     # Buttons to show the dielectric and run the simulation
@@ -82,15 +83,7 @@ app.layout = dbc.Container([
 ])
 
 
-
-
-
-# Callback to update the configurators based on the selected photonic crystal type
-@app.callback(
-    Output('configurator-box', 'children'),
-    [Input('crystal-type-dropdown', 'value')]
-)
-def update_configurators(crystal_type):
+def switch_configurator(crystal_type):
     common_inputs = [
         dbc.Row([
             dbc.Col(html.Label("Crystal ID"), width=4),
@@ -161,6 +154,16 @@ def update_configurators(crystal_type):
         ]
     else:
         return html.Div("Invalid crystal type selected.")
+
+
+
+# Callback to update the configurators based on the selected photonic crystal type
+@app.callback(
+    Output('configurator-box', 'children'),
+    [Input('crystal-type-dropdown', 'value')]
+)
+def update_configurators(crystal_type):
+    return switch_configurator(crystal_type)
     
 # Callback to set the active crystal and configuration
 @app.callback(
@@ -207,76 +210,89 @@ def update_crystal(n_clicks, crystal_id, crystal_type, lattice_type, radius, eps
     active_crystal_has_been_run = False
     return "The active crystal has been updated."
 
-# Callback to pickle the active crystal and configuration.
+# Callback to pickle the active crystal and configuration and trigger a download.
 @app.callback(
-    Output('message-box', 'value', allow_duplicate=True),
+    [Output('download-crystal', 'data'),
+     Output('message-box', 'value', allow_duplicate=True)],
     [Input('save-crystal-button', 'n_clicks')],
     [State('crystal-id-input', 'value'),
-        State('crystal-type-dropdown', 'value'),
-        State('lattice-type-dropdown', 'value'),
-        State('radius-input', 'value'),
-        State('epsilon-bulk-input', 'value'),
-        State('epsilon-atom-input', 'value'),
-        State('epsilon-background-input', 'value'),
-        State('height-slab-input', 'value'),
-        State('height-supercell-input', 'value')], 
-    prevent_initial_call=True  
+     State('crystal-type-dropdown', 'value'),
+     State('lattice-type-dropdown', 'value'),
+     State('radius-input', 'value'),
+     State('epsilon-bulk-input', 'value'),
+     State('epsilon-atom-input', 'value'),
+     State('epsilon-background-input', 'value'),
+     State('height-slab-input', 'value'),
+     State('height-supercell-input', 'value')],
+    prevent_initial_call=True
 )
 def save_crystal(n_clicks, crystal_id, crystal_type, lattice_type, radius, epsilon_bulk, epsilon_atom, epsilon_background, height_slab, height_supercell):
     if n_clicks is None:
-        return ""
+        return None, ""
 
     global crystal_active, configuration_active, active_crystal_has_been_run
+
+    if crystal_active is None:
+        return dcc.send_string("No crystal has been created. Save operation aborted.", "error.txt"), "No crystal has been created. Save operation aborted."
 
     if not active_crystal_has_been_run:
-        return "The active crystal has not been run. Save operation aborted."
+        return dcc.send_string("The active crystal has not been run. Save operation aborted.", "error.txt"), "The active crystal has not been run. Save operation aborted."
 
-    # Use the default file browser to save the file
-    root = tk.Tk()
-    root.withdraw()  # Hide the main tkinter window
-    root.call('wm', 'attributes', '.', '-topmost', True)  # Bring the dialog to the front
-    default_filename = f"{crystal_id}.pkl" if crystal_id else "crystal.pkl"
-    file_path = filedialog.asksaveasfilename(defaultextension=".pkl", initialfile=default_filename, filetypes=[("Pickle files", "*.pkl")])
+    data = {
+        'crystal': crystal_active,
+        'configuration': configuration_active
+    }
+    serialized_data = pickle.dumps(data)
+    filename = f"{crystal_id}.pkl" if crystal_id else "crystal.pkl"
 
-    if file_path:
-        with open(file_path, 'wb') as f:
-            pickle.dump({
-                'crystal': crystal_active,
-                'configuration': configuration_active
-            }, f)
-        return f"Crystal configuration saved successfully to {file_path}."
-    else:
-        return "Save operation canceled by the user."
+    return dcc.send_bytes(serialized_data, filename), f"Crystal configuration saved successfully as {filename}."
 
 
-# Callback to load the active crystal and configuration. The configuration is then used to update the configurators.
+# Callback to load the active crystal and configuration using dcc.Upload.
 @app.callback(
-    Output('message-box', 'value', allow_duplicate=True),
-    [Input('load-crystal-button', 'n_clicks')],
+    [Output('message-box', 'value', allow_duplicate=True),
+     Output('crystal-id-input', 'value', allow_duplicate=True),
+     Output('crystal-type-dropdown', 'value', allow_duplicate=True),
+     Output('lattice-type-dropdown', 'value', allow_duplicate=True),
+     Output('radius-input', 'value', allow_duplicate=True),
+     Output('epsilon-bulk-input', 'value', allow_duplicate=True),
+     Output('epsilon-atom-input', 'value', allow_duplicate=True),
+     Output('epsilon-background-input', 'value', allow_duplicate=True),
+     Output('height-slab-input', 'value', allow_duplicate=True),
+     Output('height-supercell-input', 'value', allow_duplicate=True),
+     Output('configurator-box', 'children', allow_duplicate=True)],
+    [Input('upload-crystal', 'contents')],
+    [State('upload-crystal', 'filename')],
     prevent_initial_call=True
 )
-def load_crystal(n_clicks):
-    if n_clicks is None:
-        return ""
+def load_crystal(contents, filename):
+    if contents is None:
+        return "", dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
     global crystal_active, configuration_active, active_crystal_has_been_run
 
-    # Use the default file browser to load the file
-    root = tk.Tk()
-    root.withdraw()  # Hide the main tkinter window
-    root.call('wm', 'attributes', '.', '-topmost', True)  # Bring the dialog to the front
-    file_path = filedialog.askopenfilename(filetypes=[("Pickle files", "*.pkl")])
+    content_type, content_string = contents.split(',')
+    decoded = base64.b64decode(content_string)
+    data = pickle.loads(decoded)
+    crystal_active = data['crystal']
+    configuration_active = data['configuration']
 
-    if file_path:
-        with open(file_path, 'rb') as f:
-            data = pickle.load(f)
-            crystal_active = data['crystal']
-            configuration_active = data['configuration']
+    print(configuration_active)
+    print(crystal_active)
 
-        # Update the configurators with the loaded configuration
-        return f"Crystal configuration loaded successfully from {file_path}."
-    else:
-        return "Load operation canceled by the user."
+    configurator_children = switch_configurator(configuration_active['crystal_type'])
+
+    return (f"Crystal configuration loaded successfully from {filename}.",
+            configuration_active['crystal_id'],
+            configuration_active['crystal_type'],
+            configuration_active['lattice_type'],
+            configuration_active['radius'],
+            configuration_active['epsilon_bulk'],
+            configuration_active['epsilon_atom'],
+            configuration_active['epsilon_background'],
+            configuration_active['height_slab'],
+            configuration_active['height_supercell'],
+            configurator_children)
 
 #function to be called when the plot epsilon button is clicked
 def plot_epsilon(crystal_type, lattice_type, radius, epsilon_bulk, epsilon_atom, epsilon_background, height_slab, height_supercell):
@@ -343,50 +359,30 @@ def plot_epsilon(crystal_type, lattice_type, radius, epsilon_bulk, epsilon_atom,
 
 
 # Function to be called when the run_simulation is clicked
-def run_simulation(crystal_type, lattice_type, radius, epsilon_bulk, epsilon_atom, epsilon_background, height_slab, height_supercell):
-    global crystal_active, configuration_active
+def run_simulation(crystal):
+    
 
-    if crystal_active is None:
-        if crystal_type == '2d':
-            geometry = Crystal2D.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk)
-            crystal_active = Crystal2D(lattice_type=lattice_type, geometry=geometry)
-        elif crystal_type == 'slab':
-            geometry = CrystalSlab.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk, eps_background=epsilon_background, height_slab=height_slab, height_supercell=height_supercell)
-            crystal_active = CrystalSlab(lattice_type=lattice_type, geometry=geometry)
-        else:
-            empty_fig = go.Figure().update_layout(title="Invalid crystal type selected.", width=700, height=700)
-            return empty_fig, empty_fig
+    if crystal is None:
+        return go.Figure(), go.Figure(), "Please update the active crystal before running the simulation."
 
-        # Update the active configuration
-        configuration_active = {
-            'crystal_id': 'crystal_1',  # Update this with the actual crystal ID if available
-            'crystal_type': crystal_type,
-            'lattice_type': lattice_type,
-            'radius': radius,
-            'epsilon_bulk': epsilon_bulk,
-            'epsilon_atom': epsilon_atom,
-            'epsilon_background': epsilon_background,
-            'height_slab': height_slab,
-            'height_supercell': height_supercell
-        }
-        print("The active crystal has been updated.")
+        
 
-    crystal_active.set_solver()
-    crystal_active.run_simulation("run_tm")
-    crystal_active.run_simulation("run_te")
-    crystal_active.extract_data()
+    crystal.set_solver()
+    crystal.run_simulation("run_tm")
+    crystal.run_simulation("run_te")
+    crystal.extract_data()
 
-    if crystal_type == '2d':
-        epsilon_fig = crystal_active.plot_epsilon_interactive()
+    if isinstance(crystal, Crystal2D):
+        epsilon_fig = crystal.plot_epsilon_interactive()
         epsilon_fig.update_layout(width=700, height=700)
-        bands_fig = crystal_active.plot_bands_interactive(polarization="tm", color="blue")
-        crystal_active.plot_bands_interactive(polarization="te", color="red", fig=bands_fig)
+        bands_fig = crystal.plot_bands_interactive(polarization="tm", color="blue")
+        crystal.plot_bands_interactive(polarization="te", color="red", fig=bands_fig)
         bands_fig.update_layout(width=700, height=700)
-    elif crystal_type == 'slab':
-        epsilon_fig = crystal_active.plot_epsilon_interactive(opacity=0.2, colorscale='matter', override_resolution_with=-1, periods=2)
+    elif isinstance(crystal, CrystalSlab):
+        epsilon_fig = crystal.plot_epsilon_interactive(opacity=0.2, colorscale='matter', override_resolution_with=-1, periods=2)
         epsilon_fig.update_layout(width=700, height=700)
-        bands_fig = crystal_active.plot_bands_interactive(polarization="tm", color="blue")
-        crystal_active.plot_bands_interactive(polarization="te", color="red", fig=bands_fig)
+        bands_fig = crystal.plot_bands_interactive(polarization="tm", color="blue")
+        crystal.plot_bands_interactive(polarization="te", color="red", fig=bands_fig)
         bands_fig.update_layout(width=700, height=700)
     else:
         empty_fig = go.Figure().update_layout(title="Invalid crystal type selected.", width=700, height=700)
@@ -394,7 +390,7 @@ def run_simulation(crystal_type, lattice_type, radius, epsilon_bulk, epsilon_ato
     
     global active_crystal_has_been_run
     active_crystal_has_been_run = True
-    return epsilon_fig, bands_fig
+    return epsilon_fig, bands_fig, "Simulation run completed."
 
 # Combined callback to handle both "Run Simulation" and "Show Dielectric" buttons
 @app.callback(
@@ -415,6 +411,7 @@ def run_simulation(crystal_type, lattice_type, radius, epsilon_bulk, epsilon_ato
 )
 def handle_buttons(run_clicks, show_clicks, crystal_type, lattice_type, radius, epsilon_bulk, epsilon_atom, epsilon_background, height_slab, height_supercell):
     ctx = dash.callback_context
+    global crystal_active
 
     if not ctx.triggered:
         return go.Figure(), go.Figure(), ""
@@ -434,16 +431,9 @@ def handle_buttons(run_clicks, show_clicks, crystal_type, lattice_type, radius, 
         return epsilon_fig, go.Figure(), "Dielectric plot generated."
 
     elif button_id == 'run-simulation-button':
-        epsilon_fig, bands_fig  = run_simulation(crystal_type, 
-                                                lattice_type, 
-                                                radius, 
-                                                epsilon_bulk, 
-                                                epsilon_atom, 
-                                                epsilon_background, 
-                                                height_slab, 
-                                                height_supercell)
+        epsilon_fig, bands_fig, msg = run_simulation(crystal_active)
         
-        return epsilon_fig, bands_fig, "Simulation run completed."
+        return epsilon_fig, bands_fig, msg
         
 # Callback to update the field plots based on the point clicked in the band diagram
 @app.callback(
@@ -465,26 +455,34 @@ def update_field_plots(clickData, crystal_type, lattice_type, radius, epsilon_bu
 
     # Extract the clicked point data
     point = clickData['points'][0]
-    band_index = point['curveNumber']
-    k_index = point['pointIndex']
-    global crystal_active, configuration_active
-    if crystal_active is None:
-        if crystal_type == '2d':
-            geometry = Crystal2D.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk)
-            crystal_active = Crystal2D(lattice_type=lattice_type, geometry=geometry)
-        elif crystal_type == 'slab':
-            geometry = CrystalSlab.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk, eps_background=epsilon_background, height_slab=height_slab, height_supercell=height_supercell)
-            crystal_active = CrystalSlab(lattice_type=lattice_type, geometry=geometry)
-        else:
-            empty_fig = go.Figure().update_layout(title="Invalid crystal type selected.", width=700, height=700)
-            return empty_fig, empty_fig
+    kx = point['x']
+    ky = point['y']
 
-    k_point = crystal_active.k_points_interpolated[k_index]
+    if crystal_type == '2d':
+        geometry = Crystal2D.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk)
+        crystal = Crystal2D(lattice_type=lattice_type, geometry=geometry)
+        crystal.set_solver()
+        crystal.run_simulation("run_tm")
+        crystal.run_simulation("run_te")
+        crystal.extract_data()
+        te_field_fig = crystal.plot_field_interactive(kx=kx, ky=ky, polarization="te")
+        tm_field_fig = crystal.plot_field_interactive(kx=kx, ky=ky, polarization="tm")
+        return te_field_fig, tm_field_fig
 
-    te_field_fig = crystal_active.plot_field_interactive(runner="run_te", k_point=k_point, periods=5)
-    tm_field_fig = crystal_active.plot_field_interactive(runner="run_tm", k_point=k_point, periods=5)
+    elif crystal_type == 'slab':
+        geometry = CrystalSlab.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk, eps_background=epsilon_background, height_slab=height_slab, height_supercell=height_supercell)
+        crystal = CrystalSlab(lattice_type=lattice_type, geometry=geometry)
+        crystal.set_solver()
+        crystal.run_simulation("run_tm")
+        crystal.run_simulation("run_te")
+        crystal.extract_data()
+        te_field_fig = crystal.plot_field_interactive(kx=kx, ky=ky, polarization="te")
+        tm_field_fig = crystal.plot_field_interactive(kx=kx, ky=ky, polarization="tm")
+        return te_field_fig, tm_field_fig
 
-    return te_field_fig, tm_field_fig
+    else:
+        empty_fig = go.Figure().update_layout(title="Invalid crystal type selected.", width=700, height=700)
+        return empty_fig, empty_fig
 
 if __name__ == '__main__':
     app.run(debug=True)
