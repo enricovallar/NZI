@@ -297,7 +297,16 @@ def load_crystal(contents, filename):
     print(configuration_active)
     print(crystal_active)
     print(f"runned before?{active_crystal_has_been_run}")
-
+    
+    # Update the crystal type dropdown to include the new options
+    crystal_type_dropdown = dcc.Dropdown(
+        id='crystal-type-dropdown',
+        options=[
+            {'label': '2D Photonic Crystal', 'value': '2d'},
+            {'label': 'Photonic Crystal Slab', 'value': 'slab'},  # Future option
+        ],
+        value=configuration_active['crystal_type'],  # Set the value to the loaded crystal type
+    )
     configurator_children = switch_configurator(configuration_active['crystal_type'], configuration_active)
 
     return (f"Crystal configuration loaded successfully from {filename}.",
