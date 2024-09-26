@@ -9,6 +9,9 @@ import base64
 import io
 import plotly.graph_objects as go
 from photonic_crystal2 import Crystal2D, CrystalSlab  # assuming the provided script is named photonic_crystal2.py
+from configuration_elements import *
+
+
 
 # Initialize the Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], prevent_initial_callbacks='initial_duplicate')
@@ -20,23 +23,16 @@ active_crystal_has_been_run = False
 app.layout = dbc.Container([
     html.H1("Photonic Crystal Simulator"),
     
-    # Dropdown for selecting the photonic crystal type
-    dbc.Row([
-        dbc.Col(html.Label("Select Photonic Crystal Type")),
-        dbc.Col(dcc.Dropdown(
-            id='crystal-type-dropdown',
-            options=[
-                {'label': '2D Photonic Crystal', 'value': '2d'},
-                {'label': 'Photonic Crystal Slab', 'value': 'slab'},  # Future option
-            ],
-            value='2d',  # Default to 2D photonic crystal
-        )),
-    ], className="mt-4"),
+    
 
     # Configurator box (with a black border)
     dbc.Row([
         dbc.Col(html.Div([
-            html.Div(id='configurator-box', style={'border': '2px solid black', 'padding': '10px'}),
+            html.Div(id='configurator-box', children=[
+                dbc.Row([
+                    configuration_elements_list
+                ], className="mt-4"),
+            ], style={'border': '2px solid black', 'padding': '10px'}),
         ])),
     ], className="mt-4"),
 
@@ -83,101 +79,45 @@ app.layout = dbc.Container([
 ])
 
 
-def switch_configurator(crystal_type, configuration=None):
-    default_values = {
-        'crystal_id': 'crystal_1',
-        'lattice_type': 'square',
-        'radius': 0.35,
-        'epsilon_bulk': 12,
-        'epsilon_atom': 1,
-        'epsilon_background': 1,
-        'height_slab': 0.5,
-        'height_supercell': 4
-    }
-
-    if configuration is not None:
-        default_values = configuration
-
-    common_inputs = [
-        dbc.Row([
-            dbc.Col(html.Label("Crystal ID"), width=4),
-            dbc.Col(dcc.Input(id='crystal-id-input', type='text', value=default_values['crystal_id'], placeholder='Enter Crystal ID'), width=8),
-        ], style={'margin-bottom': '10px'}),
-        
-        dbc.Row([
-            dbc.Col(html.Label("Lattice Type"), width=4),
-            dbc.Col(dcc.Dropdown(
-                id='lattice-type-dropdown',
-                options=[
-                    {'label': 'Square', 'value': 'square'},
-                    {'label': 'Triangular', 'value': 'triangular'}
-                ],
-                value=default_values['lattice_type'],  # Default to square
-            ), width=8),
-        ], style={'margin-bottom': '10px'}),
-        
-        dbc.Row([
-            dbc.Col(html.Label("Radius"), width=4),
-            dbc.Col(dcc.Input(id='radius-input', type='number', value=default_values['radius'], step=0.01), width=8),
-        ], style={'margin-bottom': '10px'}),
-        
-        dbc.Row([
-            dbc.Col(html.Label("Epsilon (Bulk Material)"), width=4),
-            dbc.Col(dcc.Input(id='epsilon-bulk-input', type='number', value=default_values['epsilon_bulk'], step=0.1), width=8),
-        ], style={'margin-bottom': '10px'}),
-        
-        dbc.Row([
-            dbc.Col(html.Label("Epsilon (Atom)"), width=4),
-            dbc.Col(dcc.Input(id='epsilon-atom-input', type='number', value=default_values['epsilon_atom'], step=0.1), width=8),
-        ], style={'margin-bottom': '10px'}),
-    ]
-
-    if crystal_type == '2d':
-        return common_inputs + [
-            dbc.Row([
-                dbc.Col(html.Label("Epsilon (Background)"), width=4),
-                dbc.Col(dcc.Input(id='epsilon-background-input', type='number', value=default_values['epsilon_background'], step=0.1), width=8),
-            ], style={'display': 'none'}),  # Hide these inputs for 2D crystal
-            
-            dbc.Row([
-                dbc.Col(html.Label("Height (Slab)"), width=4),
-                dbc.Col(dcc.Input(id='height-slab-input', type='number', value=default_values['height_slab'], step=0.01), width=8),
-            ], style={'display': 'none'}),  # Hide these inputs for 2D crystal
-            
-            dbc.Row([
-                dbc.Col(html.Label("Height (Supercell)"), width=4),
-                dbc.Col(dcc.Input(id='height-supercell-input', type='number', value=default_values['height_supercell'], step=0.1), width=8),
-            ], style={'display': 'none'})  # Hide these inputs for 2D crystal
-        ]
-    elif crystal_type == 'slab':
-        return common_inputs + [
-            dbc.Row([
-                dbc.Col(html.Label("Epsilon (Background)"), width=4),
-                dbc.Col(dcc.Input(id='epsilon-background-input', type='number', value=default_values['epsilon_background'], step=0.1), width=8),
-            ], style={'margin-bottom': '10px'}),
-            
-            dbc.Row([
-                dbc.Col(html.Label("Height (Slab)"), width=4),
-                dbc.Col(dcc.Input(id='height-slab-input', type='number', value=default_values['height_slab'], step=0.01), width=8),
-            ], style={'margin-bottom': '10px'}),
-            
-            dbc.Row([
-                dbc.Col(html.Label("Height (Supercell)"), width=4),
-                dbc.Col(dcc.Input(id='height-supercell-input', type='number', value=default_values['height_supercell'], step=0.1), width=8),
-            ], style={'margin-bottom': '10px'}),
-        ]
-    else:
-        return html.Div("Invalid crystal type selected.")
-
 
 
 # Callback to update the configurators based on the selected photonic crystal type
 @app.callback(
     Output('configurator-box', 'children'),
-    [Input('crystal-type-dropdown', 'value')]
+    [Input('crystal-type-dropdown', 'value')],
+    [State('crystal-id-input', 'value'),
+     State('lattice-type-dropdown', 'value'),
+     State('radius-input', 'value'),
+     State('epsilon-bulk-input', 'value'),
+     State('epsilon-atom-input', 'value'),
+     State('epsilon-background-input', 'value'),
+     State('height-slab-input', 'value'),
+     State('height-supercell-input', 'value')]
 )
-def update_configurators(crystal_type):
-    return switch_configurator(crystal_type)
+def switch_configurator(crystal_type, crystal_id, lattice_type, radius, epsilon_bulk, epsilon_atom, epsilon_background, height_slab, height_supercell):
+    if crystal_type == '2d':
+        return [
+            configuration_elements['crystal-id-input'].element,
+            configuration_elements['crystal-type-dropdown'].element,
+            configuration_elements['lattice-type-dropdown'].element,
+            configuration_elements['radius-input'].element,
+            configuration_elements['epsilon-bulk-input'].element,
+            configuration_elements['epsilon-atom-input'].element
+        ]
+    elif crystal_type == 'slab':
+        return [
+            configuration_elements['crystal-id-input'].element,
+            configuration_elements['crystal-type-dropdown'].element,
+            configuration_elements['lattice-type-dropdown'].element,
+            configuration_elements['radius-input'].element,
+            configuration_elements['epsilon-bulk-input'].element,
+            configuration_elements['epsilon-atom-input'].element,
+            configuration_elements['epsilon-background-input'].element,
+            configuration_elements['height-slab-input'].element,
+            configuration_elements['height-supercell-input'].element
+        ]
+    else:
+        return []
     
 # Callback to set the active crystal and configuration
 @app.callback(
