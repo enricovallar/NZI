@@ -1,5 +1,7 @@
 #%%
-
+import math
+import meep as mp
+from meep import mpb
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output, State
@@ -11,7 +13,7 @@ import base64
 import io
 import plotly.graph_objects as go
 from photonic_crystal2 import Crystal2D, CrystalSlab  # assuming the provided script is named photonic_crystal2.py
-from configuration_elements import *
+from ui_elements import *
 
 
 
@@ -25,17 +27,26 @@ active_crystal_has_been_run = False
 app.layout = dbc.Container([
     html.H1("Photonic Crystal Simulator"),
     
-    
-
     # Configurator box (with a black border)
     dbc.Row([
+
+        # Box on the left to set up material properties
         dbc.Col(html.Div([
-            html.Div(id='configurator-box', children=[
+            html.Div(id='crystal-configurator-box', children=[
                 dbc.Row(
                     configuration_elements_list,
                     className="mt-4"),
             ], style={'border': '2px solid black', 'padding': '10px'}),
         ])),
+
+        # New box on the right
+        dbc.Col(html.Div([
+            html.Div(id='runner-configurator-box', children=[
+            dbc.Row(
+                    runner_configuration_elements_list,
+                    className="mt-4"),
+            ], style={'border': '2px solid black', 'padding': '10px'}),
+        ]))
     ], className="mt-4"),
 
     # Buttons to save and load the crystal
@@ -69,23 +80,23 @@ app.layout = dbc.Container([
 
     # Placeholder for results (two plots: epsilon on the left and bands on the right)
     dbc.Row([
-        dbc.Col(dcc.Graph(id='epsilon-graph', style={'height': '700px', 'width': '700px'}), width=6),
-        dbc.Col(dcc.Graph(id='bands-graph', style={'height': '700px', 'width': '700px'}, clickData=None), width=6),
+        dbc.Col(dcc.Graph(id='epsilon-graph', style={'height': '700px', 'width': '700px', 'padding-right': '200px'}), width=6),
+        dbc.Col(dcc.Graph(id='bands-graph', style={'height': '700px', 'width': '700px', 'padding-left': '200px'}, clickData=None), width=6),
     ], className="mt-4"),
 
     # Placeholder for field plots (TE-like on the left and TM-like on the right)
     dbc.Row([
-        dbc.Col(dcc.Graph(id='te-field-graph', style={'height': '700px', 'width': '700px'}), width=6),
-        dbc.Col(dcc.Graph(id='tm-field-graph', style={'height': '700px', 'width': '700px'}), width=6),
+        dbc.Col(dcc.Graph(id='te-field-graph', style={'height': '700px', 'width': '700px', 'padding-right': '200px'}), width=6),
+        dbc.Col(dcc.Graph(id='tm-field-graph', style={'height': '700px', 'width': '700px', 'padding-left': '200px'}), width=6),
     ], className="mt-4")
 
 
 ])
 
 
-# callback to update the configurator-box content when a different photonic crystal type is selected
+# callback to update the crystal-configurator-box content when a different photonic crystal type is selected
 @app.callback(
-    [Output('configurator-box', 'children'),
+    [Output('crystal-configurator-box', 'children'),
      Output('crystal-type-dropdown', 'value')],
     Input('crystal-type-dropdown', 'value')
 )
@@ -171,12 +182,13 @@ Has the simulation been run yet? {active_crystal_has_been_run}
 def save_crystal(n_clicks, previous_message):
     if n_clicks is None:
         return dash.no_update, previous_message
-
+    print("saving")
     global crystal_active, configuration_active, active_crystal_has_been_run
 
     if crystal_active is None or configuration_active is None:
+        print("no active crystal or configuration to save")
         return dash.no_update, previous_message + "\nNo active crystal or configuration to save."
-
+    
     data = pickle.dumps({
         'crystal_active': crystal_active,
         'configuration_active': configuration_active,
@@ -185,6 +197,8 @@ def save_crystal(n_clicks, previous_message):
     b64 = base64.b64encode(data).decode()
 
     new_message = previous_message + "\nCrystal configuration has been saved successfully."
+    print("saved")
+    
 
     return {
         'content': b64,
@@ -193,15 +207,16 @@ def save_crystal(n_clicks, previous_message):
     }, new_message
 
 
-# Callback to load a crystal configuration from a file. Update the configurator-box and message-box
+# Callback to load a crystal configuration from a file. Update the crystal-configurator-box and message-box
 @app.callback(
     [Output('message-box', 'value', allow_duplicate=True),
-     Output('configurator-box', 'children', allow_duplicate=True)],
+     Output('crystal-configurator-box', 'children', allow_duplicate=True)],
     Input('upload-crystal', 'contents'),
     State('message-box', 'value'),
     prevent_initial_call=True
 )
 def load_crystal(contents, previous_message):
+    print("loading")
     if contents is None:
         return previous_message, dash.no_update
 
@@ -231,7 +246,7 @@ def load_crystal(contents, previous_message):
         configuration_elements[key].change_value(configuration_active[target_key])
 
     new_message = previous_message + f"\nCrystal configuration has been loaded successfully:\n{configuration_active}."
-
+    print("loaded")
     return new_message, configuration_elements_list
 
 #function to be called when the plot epsilon button is clicked
@@ -325,7 +340,44 @@ def run_simulation_callback(n_clicks, epsilon_fig, bands_fig, previous_message):
     epsilon_fig, bands_fig, msg = run_simulation(crystal_active)
     return epsilon_fig, bands_fig, previous_message + "\n" + msg + f"\nHas the simulation been run yet? {active_crystal_has_been_run}"
 
+# Callback to update the field plots when the bands plot is clicked
+@app.callback(
+    [Output('te-field-graph', 'figure', allow_duplicate=True),
+     Output('tm-field-graph', 'figure', allow_duplicate=True),
+     Output('message-box', 'value', allow_duplicate=True)],
+    Input('bands-graph', 'clickData'),
+    State('te-field-graph', 'figure'),
+    State('tm-field-graph', 'figure'),
+    State('message-box', 'value'),
+    prevent_initial_call=True
+)
+def update_field_plots(clickData, te_field_fig, tm_field_fig, previous_message):
+    if clickData is None:
+        return te_field_fig, tm_field_fig, previous_message + "\nNo point selected in the bands plot."
 
+    global crystal_active, active_crystal_has_been_run
+
+    if crystal_active is None:
+        return te_field_fig, tm_field_fig, previous_message + "\nNo active crystal for field plotting."
+
+    if active_crystal_has_been_run is False:
+        return te_field_fig, tm_field_fig, previous_message + "\nSimulation not yet run. Please run the simulation first."
+
+    # Extract the selected k-point data from the clicked bands plot
+    kx, ky, kz = clickData['points'][0]['customdata']
+    k_point = mp.Vector3(kx, ky, kz)
+
+    # Generate the TE and TM field plots
+    print(f"calculating fields at k-point: {kx:.3f}, {ky:.3f}, {kz:.3f}")
+    te_field_fig = crystal_active.plot_field_interactive(runner="run_te", k_point=k_point,  title="TE-like Field")
+    tm_field_fig = crystal_active.plot_field_interactive(runner="run_tm", k_point=k_point,  title="TM-like Field")
+
+    new_message = previous_message + f"\nFields plotted for k-point ({kx:.3f}, {ky:.3f}, {kz:.3f})."
+    
+    return te_field_fig, tm_field_fig, new_message
+
+
+    
 
 
 
