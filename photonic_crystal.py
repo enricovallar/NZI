@@ -717,7 +717,7 @@ def main():
 def test_slab():
     #%%
     
-    from photonic_crystal2 import CrystalSlab
+    from photonic_crystal import CrystalSlab
     
     
 

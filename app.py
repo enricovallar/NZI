@@ -12,7 +12,7 @@ from tkinter import filedialog
 import base64
 import io
 import plotly.graph_objects as go
-from photonic_crystal2 import Crystal2D, CrystalSlab  # assuming the provided script is named photonic_crystal2.py
+from photonic_crystal import Crystal2D, CrystalSlab  # assuming the provided script is named photonic_crystal2.py
 from ui_elements import *
 
 
