@@ -707,6 +707,129 @@ class CrystalSlab(PhotonicCrystal):
                                         height=height_slab))
         
         return geometry
+    
+    
+    def plot_field_interactive(self, 
+                               runner="run_tm", 
+                               k_point=mp.Vector3(0, 0), 
+                               periods=5, 
+                               fig=None,
+                               title="Field Visualization", 
+                               colorscale='RdBu'):
+            raw_fields = []
+            freqs = []
+
+            ms = mpb.ModeSolver(geometry=self.geometry,
+                                geometry_lattice=self.geometry_lattice,
+                                k_points=[k_point],
+                                resolution=self.resolution,
+                                num_bands=self.num_bands)
+            
+            def get_zodd_fields(ms, band):
+                raw_fields.append(ms.get_hfield(band, bloch_phase=True))
+            def get_zeven_fields(ms, band):
+                raw_fields.append(ms.get_efield(band, bloch_phase=True))
+            def get_freqs(ms, band):
+                freqs.append(ms.freqs[band-1])
+
+            
+        
+            if runner == "run_te" or runner == "run_zeven":
+                ms.run_te(mpb.output_at_kpoint(k_point, mpb.fix_hfield_phase, get_zodd_fields, get_freqs))
+                field_type = "H-field"
+                print(f"frequencies: {freqs}")
+                
+            elif runner == "run_tm" or runner == "run_zodd":
+                ms.run_tm(mpb.output_at_kpoint(k_point, mpb.fix_efield_phase, get_zeven_fields, get_freqs))
+                field_type = "E-field"
+                print(f"frequencies: {freqs}")
+                
+            else:
+                raise ValueError("Invalid runner. Please enter 'run_te', 'run_zeven', or 'run_tm' or 'run_zodd'.")
+            
+            md = mpb.MPBData(rectify=True, periods=periods)
+            eps = md.convert(ms.get_epsilon())
+            
+            z_points = eps.shape[2]//periods
+            
+            
+            #now take only epsilon in the center of the slab
+            eps = eps[..., z_points // 2]
+           
+
+            fields = []        
+            for field in raw_fields:
+                
+                field = field[..., z_points // 2, 2]  # Get just the z component of the fields in the center
+                fields.append(md.convert(field))
+            
+            
+            
+            print(f"Epsilon shape: {eps.shape}")
+            print(f"Field shape: {fields[-1].shape}")
+            num_plots = len(fields)
+            if num_plots == 0:
+                print("No field data to plot.")
+                return
+
+            if fig is None:
+                fig = go.Figure()
+
+            # Automatically generate the subtitle with the k-vector and field type
+            subtitle = f"{field_type}, z-component<br>k = ({k_point.x:.4f}, {k_point.y:.4f})"
+
+            # Initialize an empty list for dropdown menu options
+            dropdown_buttons = []
+
+            # Calculate the midpoint between min and max of the permittivity (eps)
+            min_eps, max_eps = np.min(eps), np.max(eps)
+            midpoint = (min_eps + max_eps) / 2  # The level to be plotted
+
+            for i, (field, freq) in enumerate(zip(fields, freqs)):
+                visible_status = [False] * (2 * num_plots)
+                visible_status[2 * i] = True  # Make the current contour (eps) visible
+                visible_status[2 * i + 1] = True  # Make the current heatmap (field) visible
+
+                # Add the contour plot for permittivity (eps) at the midpoint
+                fig.add_trace(go.Contour(z=eps.T,
+                                        contours=dict(
+                                            start=midpoint,  # Start and end at the midpoint to ensure a single level
+                                            end=midpoint,
+                                            size=0.1,  # A small size to keep it as a single contour
+                                            coloring='none'  # No filling
+                                        ),
+                                        line=dict(color='black', width=2),
+                                        showscale=False,
+                                        opacity=0.7,
+                                        visible=True if i == 0 else False))  # Initially visible only for the first plot
+                
+                # Add the heatmap for the real part of the electric field
+                fig.add_trace(go.Heatmap(z=np.real(field).T, colorscale=colorscale, zsmooth='best', opacity=0.9,
+                                        showscale=False, visible=True if i == 0 else False))
+
+                # Create a button for each field dataset for the dropdown
+                dropdown_buttons.append(dict(label=f'Mode {i + 1}',
+                                            method='update',
+                                            args=[{'visible': visible_status},  # Update visibility for both eps and field
+                                                {'title':f"{title}<br>Mode {i + 1}, freq={freq:0.3f}, z=0: {subtitle}"}
+                                            ]))
+
+            # Add the dropdown menu to the layout
+            fig.update_layout(
+                updatemenus=[dict(active=0,  # The first dataset is active by default
+                                buttons=dropdown_buttons,
+                                x=1.15, y=1.15,  # Positioning the dropdown to the top right
+                                xanchor='left', yanchor='top')],
+                title=f"{title}<br>Mode {1}, freq={freqs[0]:0.3f}, z=0: {subtitle}",  # Main title + subtitle
+                xaxis_showgrid=False, yaxis_showgrid=False,
+                xaxis_zeroline=False, yaxis_zeroline=False,
+                xaxis_visible=False, yaxis_visible=False,
+                hovermode="closest",
+                width=800, height=800
+            )
+
+            # Display the plot
+            return fig
 
 
 
@@ -753,8 +876,11 @@ def test_slab():
                                                               override_resolution_with=16, 
                                                               periods = 2)
     print("ready to show")
-    
     fig_eps.show()
+
+    fig_field = crystal_slab.plot_field_interactive(runner="run_tm", k_point=mp.Vector3(0, 0), periods=5)
+    fig_field.show()
+    
 
     
 
