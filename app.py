@@ -30,23 +30,53 @@ app.layout = dbc.Container([
     # Configurator box (with a black border)
     dbc.Row([
 
-        # Box on the left to set up material properties
-        dbc.Col(html.Div([
-            html.Div(id='crystal-configurator-box', children=[
-                dbc.Row(
-                    configuration_elements_list,
-                    className="mt-4"),
-            ], style={'border': '2px solid black', 'padding': '10px'}),
-        ])),
+        # Box on the left to set up geometry properties
+        dbc.Col(
+            dbc.Card(
+                dbc.CardBody([
+                    html.H4("Geometry Configuration"),
+                    html.Div(id='geometry-configurator-box', children=[
+                        dbc.Row(
+                            geometry_configuration_elements_list,
+                            className="mt-4"),
+                    ])
+                ]),
+                style={'border': '2px solid black', 'padding': '10px', 'height': '100%', 'overflowY': 'scroll'}
+            ),
+            width=4, style={'height': '400px'}
+        ),
 
-        # New box on the right
-        dbc.Col(html.Div([
-            html.Div(id='runner-configurator-box', children=[
-            dbc.Row(
-                    runner_configuration_elements_list,
-                    className="mt-4"),
-            ], style={'border': '2px solid black', 'padding': '10px'}),
-        ]))
+        # Box in the middle to set up material properties
+        dbc.Col(
+            dbc.Card(
+                dbc.CardBody([
+                    html.H4("Material Configuration"),
+                    html.Div(id='material-configurator-box', children=[
+                        dbc.Row(
+                            material_configuration_elements_list,
+                            className="mt-4"),
+                    ])
+                ]),
+                style={'border': '2px solid black', 'padding': '10px', 'height': '100%', 'overflowY': 'scroll'}
+            ),
+            width=4, style={'height': '400px'}
+        ),
+
+        # Box on the right to set up solver properties
+        dbc.Col(
+            dbc.Card(
+                dbc.CardBody([
+                    html.H4("Solver Configuration"),
+                    html.Div(id='solver-configurator-box', children=[
+                        dbc.Row(
+                            solver_configuration_elements_list,
+                            className="mt-4"),
+                    ])
+                ]),
+                style={'border': '2px solid black', 'padding': '10px', 'height': '100%', 'overflowY': 'scroll'}
+            ),
+            width=4, style={'height': '400px'}
+        )
     ], className="mt-4"),
 
     # Buttons to save and load the crystal
@@ -93,10 +123,11 @@ app.layout = dbc.Container([
 
 ])
 
-
-# callback to update the crystal-configurator-box content when a different photonic crystal type is selected
+# callback to update the configurator-box content when a different photonic crystal type is selected
 @app.callback(
-    [Output('crystal-configurator-box', 'children'),
+    [Output('geometry-configurator-box', 'children'),
+     Output('material-configurator-box', 'children'),
+     Output('solver-configurator-box', 'children'),
      Output('crystal-type-dropdown', 'value')],
     Input('crystal-type-dropdown', 'value')
 )
@@ -104,19 +135,18 @@ def update_configurator(crystal_type):
     global crystal_active, configuration_active, active_crystal_has_been_run
 
     if crystal_type == '2d':
-        configuration_elements['epsilon-background-input'].hide()
-        configuration_elements['height-slab-input'].hide()
-        configuration_elements['height-supercell-input'].hide()
-        return configuration_elements_list, crystal_type
+        material_configuration_elements['epsilon-background-input'].hide()
+        geometry_configuration_elements['height-slab-input'].hide()
+        geometry_configuration_elements['height-supercell-input'].hide()
+        return geometry_configuration_elements_list, material_configuration_elements_list, solver_configuration_elements_list, crystal_type
           
-    
     elif crystal_type == 'slab':
-        configuration_elements['epsilon-background-input'].show()
-        configuration_elements['height-slab-input'].show()
-        configuration_elements['height-supercell-input'].show()
-        return configuration_elements_list, crystal_type
+        material_configuration_elements['epsilon-background-input'].show()
+        geometry_configuration_elements['height-slab-input'].show()
+        geometry_configuration_elements['height-supercell-input'].show()
+        return geometry_configuration_elements_list, material_configuration_elements_list, solver_configuration_elements_list, crystal_type
     else:
-        return [], '2d'
+        return [], [], [], '2d'
     
 
 # Callback to set the active crystal and configuration
@@ -132,10 +162,13 @@ def update_configurator(crystal_type):
      State('epsilon-atom-input', 'value'),
      State('epsilon-background-input', 'value'),
      State('height-slab-input', 'value'),
-     State('height-supercell-input', 'value')],
+     State('height-supercell-input', 'value'),
+     State('runner-selector-dropdown', 'value'),
+     State('runner-2-selector-dropdown', 'value'),
+     State('interpolation-input', 'value')],
     prevent_initial_call=True
 )
-def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice_type, radius, epsilon_bulk, epsilon_atom, epsilon_background, height_slab, height_supercell):
+def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice_type, radius, epsilon_bulk, epsilon_atom, epsilon_background, height_slab, height_supercell, runner_1, runner_2, interpolation):
     if n_clicks is None:
         return previous_message
 
@@ -159,7 +192,10 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
         'epsilon_atom': epsilon_atom,
         'epsilon_background': epsilon_background,
         'height_slab': height_slab,
-        'height_supercell': height_supercell
+        'height_supercell': height_supercell,
+        'runner_1': runner_1,
+        'runner_2': runner_2,
+        'interpolation': interpolation
     }
 
     active_crystal_has_been_run = False
@@ -206,11 +242,12 @@ def save_crystal(n_clicks, previous_message):
         'base64': True
     }, new_message
 
-
 # Callback to load a crystal configuration from a file. Update the crystal-configurator-box and message-box
 @app.callback(
     [Output('message-box', 'value', allow_duplicate=True),
-     Output('crystal-configurator-box', 'children', allow_duplicate=True)],
+        Output('geometry-configurator-box', 'children', allow_duplicate=True),
+        Output('material-configurator-box', 'children', allow_duplicate=True),
+        Output('solver-configurator-box', 'children', allow_duplicate=True)],
     Input('upload-crystal', 'contents'),
     State('message-box', 'value'),
     prevent_initial_call=True
@@ -218,7 +255,7 @@ def save_crystal(n_clicks, previous_message):
 def load_crystal(contents, previous_message):
     print("loading")
     if contents is None:
-        return previous_message, dash.no_update
+        return previous_message, dash.no_update, dash.no_update, dash.no_update
 
     global crystal_active, configuration_active, active_crystal_has_been_run
 
@@ -233,21 +270,29 @@ def load_crystal(contents, previous_message):
     # Update the configurator elements with the loaded configuration
     if configuration_active:
         if configuration_active['crystal_type'] == '2d':
-            configuration_elements['epsilon-background-input'].hide()
-            configuration_elements['height-slab-input'].hide()
-            configuration_elements['height-supercell-input'].hide()
+            material_configuration_elements['epsilon-background-input'].hide()
+            geometry_configuration_elements['height-slab-input'].hide()
+            geometry_configuration_elements['height-supercell-input'].hide()
         elif configuration_active['crystal_type'] == 'slab':
-            configuration_elements['epsilon-background-input'].show()
-            configuration_elements['height-slab-input'].show()
-            configuration_elements['height-supercell-input'].show()
+            material_configuration_elements['epsilon-background-input'].show()
+            geometry_configuration_elements['height-slab-input'].show()
+            geometry_configuration_elements['height-supercell-input'].show()
     
-    for key in configuration_elements.keys():
-        target_key = configuration_elements[key].parameter_id
-        configuration_elements[key].change_value(configuration_active[target_key])
+    for key in geometry_configuration_elements.keys():
+        target_key = geometry_configuration_elements[key].parameter_id
+        geometry_configuration_elements[key].change_value(configuration_active[target_key])
+
+    for key in material_configuration_elements.keys():
+        target_key = material_configuration_elements[key].parameter_id
+        material_configuration_elements[key].change_value(configuration_active[target_key])
+
+    for key in solver_configuration_elements.keys():
+        target_key = solver_configuration_elements[key].parameter_id
+        solver_configuration_elements[key].change_value(configuration_active[target_key])
 
     new_message = previous_message + f"\nCrystal configuration has been loaded successfully:\n{configuration_active}."
     print("loaded")
-    return new_message, configuration_elements_list
+    return new_message, geometry_configuration_elements_list, material_configuration_elements_list, solver_configuration_elements_list
 
 #function to be called when the plot epsilon button is clicked
 def plot_epsilon(epsilon_fig):

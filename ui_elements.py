@@ -33,6 +33,9 @@ class UI_element:
 
     def change_value(self, new_value):
         self.element.children[1].children.value = new_value
+    
+def dict_to_elements_list(dictionary):
+    return  [dictionary[k].element for k in dictionary.keys()]
 
     
 default_values = {
@@ -44,8 +47,38 @@ default_values = {
     'epsilon_atom': 1,
     'epsilon_background': 1,
     'height_slab': 0.5,
-    'height_supercell': 4
+    'height_supercell': 4,
+    'runner_1': 'run_te',
+    'runner_2': 'run_tm',
+    'interpolation': 4
 }
+
+geometry_default_values = {
+    'crystal_type': '2d',
+    'crystal_id': 'crystal_1',
+    'lattice_type': 'square',
+    'radius': 0.35,
+    'height_slab': 0.5,
+    'height_supercell': 4,
+}
+
+material_default_values = {
+    'epsilon_bulk': 12,
+    'epsilon_atom': 1,
+    'epsilon_background': 1,
+}
+
+solver_default_values = {
+    'runner_1': 'run_te',
+    'runner_2': 'run_tm',
+    'interpolation': 4,
+}
+
+
+
+
+
+
 
 crystal_type_dropdown = UI_element('crystal-type-dropdown', parameter_id='crystal_type')
 crystal_type_dropdown.element = dbc.Row(
@@ -58,7 +91,7 @@ crystal_type_dropdown.element = dbc.Row(
                 {'label': 'Photonic Crystal Slab', 'value': 'slab'},  # Future option
             ],
             value=default_values["crystal_type"],  # Default to 2D photonic crystal
-        ), width=4),
+        ), width=8),
     ],
     style={'padding': '10px', "display": "flex"},
     id=crystal_type_dropdown.container_id
@@ -86,7 +119,7 @@ lattice_type_dropdown.element = dbc.Row(
                 {'label': 'Triangular', 'value': 'triangular'}
             ],
             value=default_values['lattice_type'],  # Default to square
-        ), width=4),
+        ), width=8),
     ],
     style={'padding': '10px', "display": "flex"},
     id=lattice_type_dropdown.container_id
@@ -101,6 +134,43 @@ radius_input.element = dbc.Row(
     style={'padding': '10px', "display": "flex"},
     id=radius_input.container_id
 )
+
+height_slab_input = UI_element('height-slab-input', parameter_id='height_slab')
+height_slab_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Height (Slab)"), width=4),
+        dbc.Col(dcc.Input(id=height_slab_input.id, type='number', value=default_values['height_slab'], step=0.01), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=height_slab_input.container_id
+)
+
+height_supercell_input = UI_element('height-supercell-input', parameter_id='height_supercell')
+height_supercell_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Height (Supercell)"), width=4),
+        dbc.Col(dcc.Input(id=height_supercell_input.id, type='number', value=default_values['height_supercell'], step=0.1), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=height_supercell_input.container_id
+)
+
+
+geometry_configuration_elements = {}
+geometry_configuration_elements = {
+    crystal_type_dropdown.id: crystal_type_dropdown,
+    crystal_id_input.id: crystal_id_input,
+    lattice_type_dropdown.id: lattice_type_dropdown,
+    radius_input.id: radius_input,
+    height_slab_input.id: height_slab_input,
+    height_supercell_input.id: height_supercell_input,
+}
+
+geometry_configuration_elements_list = dict_to_elements_list(geometry_configuration_elements)
+
+#_______________________________________________________________
+#  Material configuration elements
+#_______________________________________________________________
 
 epsilon_bulk_input = UI_element('epsilon-bulk-input', parameter_id='epsilon_bulk')
 epsilon_bulk_input.element = dbc.Row(
@@ -132,49 +202,18 @@ epsilon_background_input.element = dbc.Row(
     id=epsilon_background_input.container_id
 )
 
-height_slab_input = UI_element('height-slab-input', parameter_id='height_slab')
-height_slab_input.element = dbc.Row(
-    [
-        dbc.Col(html.Label("Height (Slab)"), width=4),
-        dbc.Col(dcc.Input(id=height_slab_input.id, type='number', value=default_values['height_slab'], step=0.01), width=8),
-    ],
-    style={'padding': '10px', "display": "flex"},
-    id=height_slab_input.container_id
-)
-
-height_supercell_input = UI_element('height-supercell-input', parameter_id='height_supercell')
-height_supercell_input.element = dbc.Row(
-    [
-        dbc.Col(html.Label("Height (Supercell)"), width=4),
-        dbc.Col(dcc.Input(id=height_supercell_input.id, type='number', value=default_values['height_supercell'], step=0.1), width=8),
-    ],
-    style={'padding': '10px', "display": "flex"},
-    id=height_supercell_input.container_id
-)
-
-
-configuration_elements = {}
-configuration_elements = {
-    crystal_type_dropdown.id: crystal_type_dropdown,
-    crystal_id_input.id: crystal_id_input,
-    lattice_type_dropdown.id: lattice_type_dropdown,
-    radius_input.id: radius_input,
+material_configuration_elements = {
     epsilon_bulk_input.id: epsilon_bulk_input,
     epsilon_atom_input.id: epsilon_atom_input,
     epsilon_background_input.id: epsilon_background_input,
-    height_slab_input.id: height_slab_input,
-    height_supercell_input.id: height_supercell_input,
 }
 
-
-def dict_to_elements_list(dictionary):
-    return  [dictionary[k].element for k in dictionary.keys()]
-
-# Example usage
-configuration_elements_list = dict_to_elements_list(configuration_elements)
+material_configuration_elements_list = dict_to_elements_list(material_configuration_elements)
 
 
-
+#_______________________________________________________________
+#  Solver configuration elements
+#_______________________________________________________________
 
 runner_1_selector_dropdown = UI_element('runner-selector-dropdown', parameter_id='runner_1')
 runner_1_selector_dropdown.element = dbc.Row(
@@ -224,13 +263,13 @@ interpolation_input.element = dbc.Row(
     id=interpolation_input.container_id
 )
 
-runner_configuration_elements = {
+solver_configuration_elements = {
     runner_1_selector_dropdown.id: runner_1_selector_dropdown,
     runner_2_selector_dropdown.id: runner_2_selector_dropdown,
     interpolation_input.id: interpolation_input,
 }
 
-runner_configuration_elements_list = dict_to_elements_list(runner_configuration_elements)
+solver_configuration_elements_list = dict_to_elements_list(solver_configuration_elements)
 
 
 
@@ -241,14 +280,53 @@ runner_configuration_elements_list = dict_to_elements_list(runner_configuration_
 #%%
 if __name__ == '__main__':
     #%%
-    
     app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
     toggle_radius_button = dbc.Button("Toggle Radius Visibility", id='toggle-radius-button', color='primary', className='mr-2')
     change_radius_button = dbc.Button("Change Radius Value", id='change-radius-button', color='secondary', className='mr-2')
 
     app.layout = dbc.Container(
-        [toggle_radius_button, change_radius_button] + [configuration_elements[k].element for k in configuration_elements.keys()],
+        [
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                [html.H4("Geometry Configuration")] + 
+                                [geometry_configuration_elements[k].element for k in geometry_configuration_elements.keys()]
+                            ),
+                            style={"border": "1px solid black", "height": "100%"}
+                        ),
+                        width=4
+                    ),
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                [html.H4("Material Configuration")] + 
+                                [material_configuration_elements[k].element for k in material_configuration_elements.keys()]
+                            ),
+                            style={"border": "1px solid black", "height": "100%"}
+                        ),
+                        width=4
+                    ),
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                [html.H4("Solver Configuration")] + 
+                                [solver_configuration_elements[k].element for k in solver_configuration_elements.keys()]
+                            ),
+                            style={"border": "1px solid black", "height": "100%"}
+                        ),
+                        width=4
+                    ),
+                ],
+                style={"margin-top": "20px"}
+            ),
+            dbc.Row(
+                [toggle_radius_button, change_radius_button],
+                style={"margin-top": "20px"}
+            )
+        ],
         fluid=True,
     )
 
@@ -261,10 +339,10 @@ if __name__ == '__main__':
         if n_clicks is None:
             raise dash.exceptions.PreventUpdate
         if current_style['display'] == 'none':
-            configuration_elements[radius_input.id].show()
+            geometry_configuration_elements[radius_input.id].show()
         else:
-            configuration_elements[radius_input.id].hide()
-        return configuration_elements[radius_input.id].element.style
+            geometry_configuration_elements[radius_input.id].hide()
+        return geometry_configuration_elements[radius_input.id].element.style
 
     @app.callback(
         Output(radius_input.id, 'value'),
@@ -275,16 +353,8 @@ if __name__ == '__main__':
         if n_clicks is None:
             raise dash.exceptions.PreventUpdate
         new_value = current_value + 0.1 if current_value is not None else 0.1
-        configuration_elements[radius_input.id].change_value(new_value)
+        geometry_configuration_elements[radius_input.id].change_value(new_value)
         return new_value
-    
-
-    app.layout = dbc.Container(
-        [toggle_radius_button, change_radius_button] + 
-        [configuration_elements[k].element for k in configuration_elements.keys()] + 
-        [runner_configuration_elements[k].element for k in runner_configuration_elements.keys()],
-        fluid=True,
-    )
 
     app.run_server(debug=True)
 
