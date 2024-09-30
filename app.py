@@ -138,12 +138,17 @@ def update_configurator(crystal_type):
         material_configuration_elements['epsilon-background-input'].hide()
         geometry_configuration_elements['height-slab-input'].hide()
         geometry_configuration_elements['height-supercell-input'].hide()
+        solver_configuration_elements['resolution-2d-input'].show()
+        solver_configuration_elements['resolution-3d-input'].hide()
+
         return geometry_configuration_elements_list, material_configuration_elements_list, solver_configuration_elements_list, crystal_type
           
     elif crystal_type == 'slab':
         material_configuration_elements['epsilon-background-input'].show()
         geometry_configuration_elements['height-slab-input'].show()
         geometry_configuration_elements['height-supercell-input'].show()
+        solver_configuration_elements['resolution-2d-input'].hide()
+        solver_configuration_elements['resolution-3d-input'].show()
         return geometry_configuration_elements_list, material_configuration_elements_list, solver_configuration_elements_list, crystal_type
     else:
         return [], [], [], '2d'
@@ -173,13 +178,36 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
         return previous_message
 
     global crystal_active, configuration_active, active_crystal_has_been_run
-
+    
     if crystal_type == '2d':
         geometry = Crystal2D.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk)
-        crystal_active = Crystal2D(lattice_type=lattice_type, geometry=geometry)
+        crystal_active = Crystal2D(
+            lattice_type=lattice_type,
+            num_bands=6,  # You can modify this as needed
+            resolution=32,  # You can modify this as needed
+            interp=interpolation,
+            periods=3,  # You can modify this as needed
+            pickle_id=crystal_id,
+            geometry=geometry
+        )
     elif crystal_type == 'slab':
-        geometry = CrystalSlab.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk, eps_background=epsilon_background, height_slab=height_slab, height_supercell=height_supercell)
-        crystal_active = CrystalSlab(lattice_type=lattice_type, geometry=geometry)
+        geometry = CrystalSlab.basic_geometry(
+            radius_1=radius,
+            eps_atom_1=epsilon_atom,
+            eps_bulk=epsilon_bulk,
+            eps_background=epsilon_background,
+            height_slab=height_slab,
+            height_supercell=height_supercell
+        )
+        crystal_active = CrystalSlab(
+            lattice_type=lattice_type,
+            num_bands=6,  # You can modify this as needed
+            resolution=mp.Vector3(32, 32, 16),  # You can modify this as needed
+            interp=interpolation,
+            periods=3,  # You can modify this as needed
+            pickle_id=crystal_id,
+            geometry=geometry
+        )
     else:
         return previous_message + "\nInvalid crystal type selected."
 

@@ -3,6 +3,7 @@ import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
+import dash_daq as daq
 
 class UI_element:
     def __init__(self, id, element=None, visible = True, parameter_id=None):
@@ -50,29 +51,44 @@ default_values = {
     'height_supercell': 4,
     'runner_1': 'run_te',
     'runner_2': 'run_tm',
-    'interpolation': 4
+    'interpolation': 10,
+    'num_bands': 6,
+    'resolution_2d': 32,
+    'resolution_3d': (32, 32, 16),
+    'advanced_material': False,
+    'epsilon_diag': (12,12,12),
+    'epsilon_offdiag': (0,0,0),
+
 }
 
 geometry_default_values = {
-    'crystal_type': '2d',
-    'crystal_id': 'crystal_1',
-    'lattice_type': 'square',
-    'radius': 0.35,
-    'height_slab': 0.5,
-    'height_supercell': 4,
+    'crystal_type': default_values['crystal_type'],
+    'crystal_id': default_values['crystal_id'],
+    'lattice_type': default_values['lattice_type'],
+    'radius': default_values['radius'],
+    'height_slab': default_values['height_slab'],
+    'height_supercell': default_values['height_supercell'],
 }
 
 material_default_values = {
-    'epsilon_bulk': 12,
-    'epsilon_atom': 1,
-    'epsilon_background': 1,
+    'epsilon_bulk': default_values['epsilon_bulk'],
+    'epsilon_atom': default_values['epsilon_atom'],
+    'epsilon_background': default_values['epsilon_background'],
+    'advanced_material': default_values['advanced_material'],
+    'epsilon_diag': default_values['epsilon_diag'],
+    'epsilon_offdiag': default_values['epsilon_offdiag'],
 }
 
 solver_default_values = {
-    'runner_1': 'run_te',
-    'runner_2': 'run_tm',
-    'interpolation': 4,
+    'runner_1': default_values['runner_1'],
+    'runner_2': default_values['runner_2'],
+    'interpolation': default_values['interpolation'],
+    'num_bands': default_values['num_bands'],
+    'resolution_2d': default_values['resolution_2d'],  # Assuming 2D resolution as default
+    'resolution_3d': default_values['resolution_3d'],
 }
+
+
 
 
 
@@ -202,10 +218,45 @@ epsilon_background_input.element = dbc.Row(
     id=epsilon_background_input.container_id
 )
 
+advanced_material_toggle = UI_element('advanced-material-toggle', parameter_id='advanced_configuration')
+advanced_material_toggle.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Advanced Material"), width=4),
+        dbc.Col(daq.BooleanSwitch(id=advanced_material_toggle.id, on=False), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=advanced_material_toggle.container_id
+)
+
+epsilon_diag_input = UI_element('epsilon-diag-input', parameter_id='epsilon_diag')
+epsilon_diag_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Epsilon (Diagonal)"), width=4),
+        dbc.Col(dcc.Input(id=epsilon_diag_input.id, type='text', value=str(default_values['epsilon_diag']), placeholder='Enter epsilon diagonal as (xx, yy, zz)'), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=epsilon_diag_input.container_id
+)
+
+epsilon_offdiag_input = UI_element('epsilon-offdiag-input', parameter_id='epsilon_offdiag')
+epsilon_offdiag_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Epsilon (Off-Diagonal)"), width=4),
+        dbc.Col(dcc.Input(id=epsilon_offdiag_input.id, type='text', value=str(default_values['epsilon_offdiag']), placeholder='Enter epsilon off-diagonal as (xy, yz, zx)'), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=epsilon_offdiag_input.container_id
+)
+
+
+
 material_configuration_elements = {
-    epsilon_bulk_input.id: epsilon_bulk_input,
     epsilon_atom_input.id: epsilon_atom_input,
     epsilon_background_input.id: epsilon_background_input,
+    advanced_material_toggle.id: advanced_material_toggle,
+    epsilon_bulk_input.id: epsilon_bulk_input, 
+    epsilon_diag_input.id: epsilon_diag_input,
+    epsilon_offdiag_input.id: epsilon_offdiag_input,   
 }
 
 material_configuration_elements_list = dict_to_elements_list(material_configuration_elements)
@@ -227,7 +278,7 @@ runner_1_selector_dropdown.element = dbc.Row(
                 {'label': 'TE-like', 'value': 'run_zeven'},
                 {'label': 'TM-like', 'value': 'run_zodd'},
             ],
-            value='run_te',  # Default to run_te
+            value=default_values['runner_1'],  # Default to run_te
         ), width=4),
     ],
     style={'padding': '10px', "display": "flex"},
@@ -246,7 +297,7 @@ runner_2_selector_dropdown.element = dbc.Row(
                 {'label': 'TE-like', 'value': 'run_zeven'},
                 {'label': 'TM-like', 'value': 'run_zodd'},
             ],
-            value='run_tm',  # Default to run_te
+            value=default_values['runner_2'],  # Default to run_tm
         ), width=4),
     ],
     style={'padding': '10px', "display": "flex"},
@@ -257,23 +308,57 @@ interpolation_input = UI_element('interpolation-input', parameter_id='interpolat
 interpolation_input.element = dbc.Row(
     [
         dbc.Col(html.Label("Interpolation"), width=4),
-        dbc.Col(dcc.Input(id=interpolation_input.id, type='number', value=4, step=0.1), width=8),
+        dbc.Col(dcc.Input(id=interpolation_input.id, type='number', value=default_values['interpolation'], step=0.1), width=8),
     ],
     style={'padding': '10px', "display": "flex"},
     id=interpolation_input.container_id
 )
 
+
+
+num_bands_input = UI_element('num-bands-input', parameter_id='num_bands')
+num_bands_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Number of Bands"), width=4),
+        dbc.Col(dcc.Input(id=num_bands_input.id, type='number', value=default_values['num_bands'], step=1), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=num_bands_input.container_id
+)
+
+resolution_2d_input = UI_element('resolution-2d-input', parameter_id='resolution_2d')
+resolution_2d_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Resolution (2D)"), width=4),
+        dbc.Col(dcc.Input(id=resolution_2d_input.id, type='number', value=default_values['resolution_2d'], step=1), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=resolution_2d_input.container_id
+)
+
+
+resolution_3d_input = UI_element('resolution-3d-input', parameter_id='resolution_3d')
+resolution_3d_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Resolution (3D)"), width=4),
+        dbc.Col(dcc.Input(id=resolution_3d_input.id, type='text', value=str(default_values['resolution_3d']), placeholder='Enter 3D resolution as (x, y, z)'), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=resolution_3d_input.container_id
+)
+
+
+
 solver_configuration_elements = {
     runner_1_selector_dropdown.id: runner_1_selector_dropdown,
     runner_2_selector_dropdown.id: runner_2_selector_dropdown,
     interpolation_input.id: interpolation_input,
+    num_bands_input.id: num_bands_input,
+    resolution_2d_input.id: resolution_2d_input,
+    resolution_3d_input.id: resolution_3d_input,
 }
 
 solver_configuration_elements_list = dict_to_elements_list(solver_configuration_elements)
-
-
-
-
 
 
 
