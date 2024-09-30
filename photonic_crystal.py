@@ -24,6 +24,7 @@ class PhotonicCrystal:
         self.interp = interp
         self.periods = periods
         self.pickle_id = pickle_id
+        self.has_been_run = False #update this manually
 
         #this values are set with basic lattice method
         self.geometry_lattice= None 

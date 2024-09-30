@@ -23,7 +23,7 @@ import dash_daq as daq
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], prevent_initial_callbacks='initial_duplicate')
 crystal_active = None 
 configuration_active = None
-active_crystal_has_been_run = False
+
 
 # Create the layout
 app.layout = dbc.Container([
@@ -59,7 +59,7 @@ app.layout = dbc.Container([
                             dbc.Col(daq.BooleanSwitch(id='advanced-material-toggle', on=False), width=8),
                         ],
                         style={'padding': '10px', "display": "flex"},
-                        id=advanced_material_toggle.container_id
+                        id='advanced-material-toggle-box'
                     ),
                     html.Div(id='material-configurator-box', children=[
                         dbc.Row(
@@ -142,7 +142,7 @@ app.layout = dbc.Container([
     Input('crystal-type-dropdown', 'value')
 )
 def update_configurator(crystal_type):
-    global crystal_active, configuration_active, active_crystal_has_been_run
+    global crystal_active, configuration_active
 
     if crystal_type == '2d':
         material_configuration_elements['epsilon-background-input'].hide()
@@ -173,30 +173,45 @@ def update_configurator(crystal_type):
      State('crystal-type-dropdown', 'value'),
      State('lattice-type-dropdown', 'value'),
      State('radius-input', 'value'),
+     State('height-slab-input', 'value'),
+     State('height-supercell-input', 'value'),
+
+     State('advanced-material-toggle', 'on'),
      State('epsilon-bulk-input', 'value'),
      State('epsilon-atom-input', 'value'),
      State('epsilon-background-input', 'value'),
-     State('height-slab-input', 'value'),
-     State('height-supercell-input', 'value'),
+     State('epsilon-diag-input', 'value'),
+     State('epsilon-offdiag-input', 'value'),
+     State('E-chi2-diag-input', 'value'),
+     State('E-chi2-offdiag-input', 'value'),
+     State('E-chi3-diag-input', 'value'),
+     State('E-chi3-offdiag-input', 'value'),
+
      State('runner-selector-dropdown', 'value'),
      State('runner-2-selector-dropdown', 'value'),
-     State('interpolation-input', 'value')],
+     State('interpolation-input', 'value'),
+     State('resolution-2d-input', 'value'),
+     State('resolution-3d-input', 'value'),
+     State('periods-for-epsilon-plot-input', 'value'),
+     State('periods-for-field-plot-input', 'value'),
+     State('num-bands-input', 'value')
+     ],
     prevent_initial_call=True
 )
-def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice_type, radius, epsilon_bulk, epsilon_atom, epsilon_background, height_slab, height_supercell, runner_1, runner_2, interpolation):
+def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice_type, radius, height_slab, height_supercell, advanced_material, epsilon_bulk, epsilon_atom, epsilon_background, epsilon_diag, epsilon_offdiag, E_chi2_diag, E_chi2_offdiag, E_chi3_diag, E_chi3_offdiag, runner_1, runner_2, interpolation, resolution_2d, resolution_3d, periods_for_epsilon_plot, periods_for_field_plot, num_bands):
     if n_clicks is None:
         return previous_message
 
-    global crystal_active, configuration_active, active_crystal_has_been_run
+    global crystal_active, configuration_active
     
     if crystal_type == '2d':
         geometry = Crystal2D.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk)
         crystal_active = Crystal2D(
             lattice_type=lattice_type,
-            num_bands=6,  # You can modify this as needed
-            resolution=32,  # You can modify this as needed
+            num_bands=num_bands,  # Updated to use the provided num_bands
+            resolution=resolution_2d,
             interp=interpolation,
-            periods=3,  # You can modify this as needed
+            periods=periods_for_epsilon_plot,
             pickle_id=crystal_id,
             geometry=geometry
         )
@@ -211,10 +226,10 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
         )
         crystal_active = CrystalSlab(
             lattice_type=lattice_type,
-            num_bands=6,  # You can modify this as needed
-            resolution=mp.Vector3(32, 32, 16),  # You can modify this as needed
+            num_bands=num_bands,  # Updated to use the provided num_bands
+            resolution=resolution_3d,
             interp=interpolation,
-            periods=3,  # You can modify this as needed
+            periods=periods_for_epsilon_plot,
             pickle_id=crystal_id,
             geometry=geometry
         )
@@ -226,21 +241,32 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
         'crystal_type': crystal_type,
         'lattice_type': lattice_type,
         'radius': radius,
+        'height_slab': height_slab,
+        'height_supercell': height_supercell,
+        'advanced_material': advanced_material,
         'epsilon_bulk': epsilon_bulk,
         'epsilon_atom': epsilon_atom,
         'epsilon_background': epsilon_background,
-        'height_slab': height_slab,
-        'height_supercell': height_supercell,
+        'epsilon_diag': epsilon_diag,
+        'epsilon_offdiag': epsilon_offdiag,
+        'E_chi2_diag': E_chi2_diag,
+        'E_chi2_offdiag': E_chi2_offdiag,
+        'E_chi3_diag': E_chi3_diag,
+        'E_chi3_offdiag': E_chi3_offdiag,
         'runner_1': runner_1,
         'runner_2': runner_2,
-        'interpolation': interpolation
+        'interpolation': interpolation,
+        'num_bands': num_bands,
+        'resolution_2d': resolution_2d,
+        'resolution_3d': resolution_3d,
+        'periods_for_epsilon_plot': periods_for_epsilon_plot,
+        'periods_for_field_plot': periods_for_field_plot,
     }
 
-    active_crystal_has_been_run = False
     new_message = f"""
 > The active crystal has been updated with the following configuration:
 {configuration_active}
-Has the simulation been run yet? {active_crystal_has_been_run}
+Has the simulation been run yet? {crystal_active.has_been_run}
 """
     return previous_message + new_message
 
@@ -257,7 +283,7 @@ def save_crystal(n_clicks, previous_message):
     if n_clicks is None:
         return dash.no_update, previous_message
     print("saving")
-    global crystal_active, configuration_active, active_crystal_has_been_run
+    global crystal_active, configuration_active
 
     if crystal_active is None or configuration_active is None:
         print("no active crystal or configuration to save")
@@ -265,8 +291,7 @@ def save_crystal(n_clicks, previous_message):
     
     data = pickle.dumps({
         'crystal_active': crystal_active,
-        'configuration_active': configuration_active,
-        'active_crystal_has_been_run': active_crystal_has_been_run
+        'configuration_active': configuration_active
     })
     b64 = base64.b64encode(data).decode()
 
@@ -295,7 +320,7 @@ def load_crystal(contents, previous_message):
     if contents is None:
         return previous_message, dash.no_update, dash.no_update, dash.no_update
 
-    global crystal_active, configuration_active, active_crystal_has_been_run
+    global crystal_active, configuration_active
 
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
@@ -303,7 +328,6 @@ def load_crystal(contents, previous_message):
 
     crystal_active = data.get('crystal_active')
     configuration_active = data.get('configuration_active')
-    active_crystal_has_been_run = data.get('active_crystal_has_been_run')
 
     # Update the configurator elements with the loaded configuration
     if configuration_active:
@@ -359,13 +383,17 @@ def plot_epsilon(epsilon_fig):
 
 # Method to run the simulation
 def run_simulation(crystal):
+    
     if crystal is None:
         return go.Figure(), go.Figure(), "Please update the active crystal before running the simulation."
-
-    crystal.set_solver()
-    crystal.run_simulation("run_tm")   #tm
-    crystal.run_simulation("run_te") #te
-    crystal.extract_data()
+    
+    if crystal.has_been_run is False:
+        crystal.set_solver()
+        crystal.run_simulation("run_tm")   #tm
+        crystal.run_simulation("run_te")   #te
+        crystal.extract_data()
+        crystal.has_been_run = True
+    
 
     if isinstance(crystal, Crystal2D):
         epsilon_fig = crystal.plot_epsilon_interactive()
@@ -383,8 +411,6 @@ def run_simulation(crystal):
         empty_fig = go.Figure().update_layout(title="Invalid crystal type selected.", width=700, height=700)
         return empty_fig, empty_fig
     
-    global active_crystal_has_been_run
-    active_crystal_has_been_run = True
     return epsilon_fig, bands_fig, "> Simulation runned.\n Epsilon and bands plotted."
 
 # Callback to show the dielectric function when the button is clicked
@@ -415,13 +441,12 @@ def show_dielectric(n_clicks, epsilon_fig, previous_message):
     prevent_initial_call=True
 )
 def run_simulation_callback(n_clicks, epsilon_fig, bands_fig, previous_message):
-    global crystal_active, active_crystal_has_been_run
+    global crystal_active
 
     if n_clicks is None:
         return dash.no_update, dash.no_update, previous_message + "\nRun Simulation button not clicked."
-    active_crystal_has_been_run = True
     epsilon_fig, bands_fig, msg = run_simulation(crystal_active)
-    return epsilon_fig, bands_fig, previous_message + "\n" + msg + f"\nHas the simulation been run yet? {active_crystal_has_been_run}"
+    return epsilon_fig, bands_fig, previous_message + "\n" + msg + f"\nHas the simulation been run yet? {crystal_active.has_been_run}."
 
 # Callback to update the field plots when the bands plot is clicked
 @app.callback(
@@ -438,12 +463,12 @@ def update_field_plots(clickData, te_field_fig, tm_field_fig, previous_message):
     if clickData is None:
         return te_field_fig, tm_field_fig, previous_message + "\nNo point selected in the bands plot."
 
-    global crystal_active, active_crystal_has_been_run
+    global crystal_active
 
     if crystal_active is None:
         return te_field_fig, tm_field_fig, previous_message + "\nNo active crystal for field plotting."
 
-    if active_crystal_has_been_run is False:
+    if  crystal_active.has_bee_run is False:
         return te_field_fig, tm_field_fig, previous_message + "\nSimulation not yet run. Please run the simulation first."
 
     # Extract the selected k-point data from the clicked bands plot
@@ -471,10 +496,19 @@ def toggle_advanced_configuration(is_advanced):
         material_configuration_elements['epsilon-diag-input'].show()
         material_configuration_elements['epsilon-offdiag-input'].show()
         material_configuration_elements['epsilon-bulk-input'].hide()  
+        material_configuration_elements['E-chi2-diag-input'].show()
+        material_configuration_elements['E-chi2-offdiag-input'].show()
+        material_configuration_elements['E-chi3-diag-input'].show()
+        material_configuration_elements['E-chi3-offdiag-input'].show()
     else:
         material_configuration_elements['epsilon-diag-input'].hide()
         material_configuration_elements['epsilon-offdiag-input'].hide()
         material_configuration_elements['epsilon-bulk-input'].show()
+        material_configuration_elements['E-chi2-diag-input'].hide()
+        material_configuration_elements['E-chi2-offdiag-input'].hide()
+        material_configuration_elements['E-chi3-diag-input'].hide()
+        material_configuration_elements['E-chi3-offdiag-input'].hide()
+
     return material_configuration_elements_list
 
 if __name__ == '__main__':

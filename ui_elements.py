@@ -57,10 +57,14 @@ default_values = {
     'num_bands': 6,
     'resolution_2d': 32,
     'resolution_3d': (32, 32, 16),
-    'advanced_material': False,
-    'epsilon_diag': (12,12,12),
-    'epsilon_offdiag': (0,0,0),
-
+    'epsilon_diag': (12, 12, 12),
+    'epsilon_offdiag': (0, 0, 0),
+    'E_chi2_diag': (0, 0, 0),
+    'E_chi2_offdiag': (0, 0, 0),
+    'E_chi3_diag': (0, 0, 0),
+    'E_chi3_offdiag': (0, 0, 0),
+    'periods_for_epsilon_plot': 3,
+    'periods_for_field_plot': 5,
 }
 
 geometry_default_values = {
@@ -76,9 +80,12 @@ material_default_values = {
     'epsilon_bulk': default_values['epsilon_bulk'],
     'epsilon_atom': default_values['epsilon_atom'],
     'epsilon_background': default_values['epsilon_background'],
-    'advanced_material': default_values['advanced_material'],
     'epsilon_diag': default_values['epsilon_diag'],
     'epsilon_offdiag': default_values['epsilon_offdiag'],
+    'E_chi2_diag': default_values.get('E_chi2_diag', ''),
+    'E_chi2_offdiag': default_values.get('E_chi2_offdiag', ''),
+    'E_chi3_diag': default_values.get('E_chi3_diag', ''),
+    'E_chi3_offdiag': default_values.get('E_chi3_offdiag', ''),
 }
 
 solver_default_values = {
@@ -88,6 +95,8 @@ solver_default_values = {
     'num_bands': default_values['num_bands'],
     'resolution_2d': default_values['resolution_2d'],  # Assuming 2D resolution as default
     'resolution_3d': default_values['resolution_3d'],
+    'periods_for_epsilon_plot': default_values['periods_for_epsilon_plot'],
+    'periods_for_field_plot': default_values['periods_for_field_plot'],
 }
 
 
@@ -220,15 +229,7 @@ epsilon_background_input.element = dbc.Row(
     id=epsilon_background_input.container_id
 )
 
-advanced_material_toggle = UI_element('advanced-material-toggle', parameter_id='advanced_configuration')
-advanced_material_toggle.element = dbc.Row(
-    [
-        dbc.Col(html.Label("Advanced Material"), width=4),
-        dbc.Col(daq.BooleanSwitch(id=advanced_material_toggle.id, on=False), width=8),
-    ],
-    style={'padding': '10px', "display": "flex"},
-    id=advanced_material_toggle.container_id
-)
+
 
 epsilon_diag_input = UI_element('epsilon-diag-input', parameter_id='epsilon_diag')
 epsilon_diag_input.element = dbc.Row(
@@ -251,17 +252,66 @@ epsilon_offdiag_input.element = dbc.Row(
 )
 
 
+E_chi2_diag_input = UI_element('E-chi2-diag-input', parameter_id='E_chi2_diag')
+E_chi2_diag_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("E (Chi2 Diagonal)"), width=4),
+        dbc.Col(dcc.Input(id=E_chi2_diag_input.id, type='text', value=str(default_values.get('E_chi2_diag', '')), placeholder='Enter E chi2 diagonal as (xx, yy, zz)'), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=E_chi2_diag_input.container_id
+)
+
+E_chi2_offdiag_input = UI_element('E-chi2-offdiag-input', parameter_id='E_chi2_offdiag')
+E_chi2_offdiag_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("E (Chi2 Off-Diagonal)"), width=4),
+        dbc.Col(dcc.Input(id=E_chi2_offdiag_input.id, type='text', value=str(default_values.get('E_chi2_offdiag', '')), placeholder='Enter E chi2 off-diagonal as (xy, yz, zx)'), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=E_chi2_offdiag_input.container_id
+)
+
+E_chi3_diag_input = UI_element('E-chi3-diag-input', parameter_id='E_chi3_diag')
+E_chi3_diag_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("E (Chi3 Diagonal)"), width=4),
+        dbc.Col(dcc.Input(id=E_chi3_diag_input.id, type='text', value=str(default_values.get('E_chi3_diag', '')), placeholder='Enter E chi3 diagonal as (xx, yy, zz)'), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=E_chi3_diag_input.container_id
+)
+
+E_chi3_offdiag_input = UI_element('E-chi3-offdiag-input', parameter_id='E_chi3_offdiag')
+E_chi3_offdiag_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("E (Chi3 Off-Diagonal)"), width=4),
+        dbc.Col(dcc.Input(id=E_chi3_offdiag_input.id, type='text', value=str(default_values.get('E_chi3_offdiag', '')), placeholder='Enter E chi3 off-diagonal as (xy, yz, zx)'), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=E_chi3_offdiag_input.container_id
+)
+
 
 material_configuration_elements = {
     epsilon_atom_input.id: epsilon_atom_input,
     epsilon_background_input.id: epsilon_background_input,
     epsilon_bulk_input.id: epsilon_bulk_input, 
     epsilon_diag_input.id: epsilon_diag_input,
-    epsilon_offdiag_input.id: epsilon_offdiag_input,   
+    epsilon_offdiag_input.id: epsilon_offdiag_input,
+    E_chi2_diag_input.id: E_chi2_diag_input,
+    E_chi2_offdiag_input.id: E_chi2_offdiag_input,
+    E_chi3_diag_input.id: E_chi3_diag_input,
+    E_chi3_offdiag_input.id: E_chi3_offdiag_input,
 }
 
 epsilon_offdiag_input.hide()
 epsilon_diag_input.hide()   
+E_chi2_diag_input.hide()
+E_chi2_offdiag_input.hide()
+E_chi3_diag_input.hide()
+E_chi3_offdiag_input.hide()
+
 
 
 material_configuration_elements_list = dict_to_elements_list(material_configuration_elements)
@@ -331,6 +381,28 @@ num_bands_input.element = dbc.Row(
     id=num_bands_input.container_id
 )
 
+periods_for_epsilon_plot_input = UI_element('periods-for-epsilon-plot-input', parameter_id='periods_for_epsilon_plot')
+periods_for_epsilon_plot_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Periods for Epsilon Plot"), width=4),
+        dbc.Col(dcc.Input(id=periods_for_epsilon_plot_input.id, type='number', value=default_values.get('periods_for_epsilon_plot', 1), step=1), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=periods_for_epsilon_plot_input.container_id
+)
+
+periods_for_field_plot_input = UI_element('periods-for-field-plot-input', parameter_id='periods_for_field_plot')
+periods_for_field_plot_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Periods for Field Plot"), width=4),
+        dbc.Col(dcc.Input(id=periods_for_field_plot_input.id, type='number', value=default_values.get('periods_for_field_plot', 1), step=1), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=periods_for_field_plot_input.container_id
+)
+
+
+
 resolution_2d_input = UI_element('resolution-2d-input', parameter_id='resolution_2d')
 resolution_2d_input.element = dbc.Row(
     [
@@ -359,6 +431,8 @@ solver_configuration_elements = {
     runner_2_selector_dropdown.id: runner_2_selector_dropdown,
     interpolation_input.id: interpolation_input,
     num_bands_input.id: num_bands_input,
+    periods_for_epsilon_plot_input.id: periods_for_epsilon_plot_input,
+    periods_for_field_plot_input.id: periods_for_field_plot_input,
     resolution_2d_input.id: resolution_2d_input,
     resolution_3d_input.id: resolution_3d_input,
 }
