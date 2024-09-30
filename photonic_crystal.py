@@ -552,7 +552,8 @@ class CrystalSlab(PhotonicCrystal):
                 resolution = self.resolution
             else:
                 resolution = override_resolution_with
-            md = mpb.MPBData(rectify=True, periods=1, resolution=resolution)
+            md = mpb.MPBData(rectify=True, periods=periods, resolution=resolution)
+            
             
             converted_eps = md.convert(self.ms.get_epsilon())
         else:
@@ -561,10 +562,9 @@ class CrystalSlab(PhotonicCrystal):
         if fig is None:
             fig = go.Figure()
 
-        epsilon = np.array(converted_eps)  # If epsilon is an MPBArray, convert it to a NumPy array
-
-        # Replicate the epsilon array along x and y axes using self.periods
-        epsilon = np.tile(epsilon, (periods, periods, 1))
+        z_points = converted_eps.shape[2]//periods
+        z_mid = converted_eps.shape[2]//2
+        epsilon = converted_eps[..., z_mid-z_points//2:z_mid+z_points//2-1]  
 
         # Create indices for x, y, z axes (meshgrid)
         x, y, z = np.meshgrid(np.arange(epsilon.shape[0]),
@@ -588,7 +588,7 @@ class CrystalSlab(PhotonicCrystal):
             isomin=isomin_value,
             isomax=isomax_value,
             opacity=opacity,  # Adjust opacity to visualize internal structure
-            surface_count=20,  # Number of surfaces to display
+            surface_count=3,  # Number of surfaces to display
             colorscale=colorscale,  # Color scale for the dielectric function
             colorbar=dict(title='Dielectric Constant')
         ))
@@ -751,10 +751,10 @@ class CrystalSlab(PhotonicCrystal):
             eps = md.convert(ms.get_epsilon())
             
             z_points = eps.shape[2]//periods
-            
+            z_mid = eps.shape[2]//2
             
             #now take only epsilon in the center of the slab
-            eps = eps[..., z_points // 2]
+            eps = eps[..., z_mid]
            
 
             fields = []        

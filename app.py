@@ -14,6 +14,8 @@ import io
 import plotly.graph_objects as go
 from photonic_crystal import Crystal2D, CrystalSlab  # assuming the provided script is named photonic_crystal2.py
 from ui_elements import *
+import dash_daq as daq
+
 
 
 
@@ -51,6 +53,14 @@ app.layout = dbc.Container([
             dbc.Card(
                 dbc.CardBody([
                     html.H4("Material Configuration"),
+                    dbc.Row(
+                        [
+                            dbc.Col(html.Label("Advanced Material"), width=4),
+                            dbc.Col(daq.BooleanSwitch(id='advanced-material-toggle', on=False), width=8),
+                        ],
+                        style={'padding': '10px', "display": "flex"},
+                        id=advanced_material_toggle.container_id
+                    ),
                     html.Div(id='material-configurator-box', children=[
                         dbc.Row(
                             material_configuration_elements_list,
@@ -264,11 +274,11 @@ def save_crystal(n_clicks, previous_message):
     print("saved")
     
 
-    return {
+    {
         'content': b64,
-        'filename': 'crystal_configuration.pkl',
+        'filename': f'crystal_configuration_{configuration_active["crystal_id"]}.pkl',
         'base64': True
-    }, new_message
+        }, new_message
 
 # Callback to load a crystal configuration from a file. Update the crystal-configurator-box and message-box
 @app.callback(
@@ -450,9 +460,22 @@ def update_field_plots(clickData, te_field_fig, tm_field_fig, previous_message):
     return te_field_fig, tm_field_fig, new_message
 
 
-    
-
-
+# Callback to toggle the visibility of advanced material configuration
+@app.callback(
+    Output('material-configurator-box', 'children', allow_duplicate=True),
+    Input('advanced-material-toggle', 'on'),
+    prevent_initial_call=True
+)
+def toggle_advanced_configuration(is_advanced):
+    if is_advanced:
+        material_configuration_elements['epsilon-diag-input'].show()
+        material_configuration_elements['epsilon-offdiag-input'].show()
+        material_configuration_elements['epsilon-bulk-input'].hide()  
+    else:
+        material_configuration_elements['epsilon-diag-input'].hide()
+        material_configuration_elements['epsilon-offdiag-input'].hide()
+        material_configuration_elements['epsilon-bulk-input'].show()
+    return material_configuration_elements_list
 
 if __name__ == '__main__':
     #%%

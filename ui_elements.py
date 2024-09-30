@@ -34,6 +34,8 @@ class UI_element:
 
     def change_value(self, new_value):
         self.element.children[1].children.value = new_value
+
+    
     
 def dict_to_elements_list(dictionary):
     return  [dictionary[k].element for k in dictionary.keys()]
@@ -253,11 +255,14 @@ epsilon_offdiag_input.element = dbc.Row(
 material_configuration_elements = {
     epsilon_atom_input.id: epsilon_atom_input,
     epsilon_background_input.id: epsilon_background_input,
-    advanced_material_toggle.id: advanced_material_toggle,
     epsilon_bulk_input.id: epsilon_bulk_input, 
     epsilon_diag_input.id: epsilon_diag_input,
     epsilon_offdiag_input.id: epsilon_offdiag_input,   
 }
+
+epsilon_offdiag_input.hide()
+epsilon_diag_input.hide()   
+
 
 material_configuration_elements_list = dict_to_elements_list(material_configuration_elements)
 
