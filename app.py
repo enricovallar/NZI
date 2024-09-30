@@ -17,6 +17,15 @@ from ui_elements import *
 import dash_daq as daq
 
 
+def string_to_vector3(vector_string):
+    try:
+        # Remove the parentheses and split the string by commas
+        vector_components = vector_string.strip('()').split(',')
+        # Convert the components to floats and create an mp.Vector3 object
+        return mp.Vector3(float(vector_components[0]), float(vector_components[1]), float(vector_components[2]))
+    except (ValueError, IndexError) as e:
+        raise ValueError(f"Invalid vector string format: {vector_string}") from e
+    
 
 
 # Initialize the Dash app
@@ -227,7 +236,7 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
         crystal_active = CrystalSlab(
             lattice_type=lattice_type,
             num_bands=num_bands,  # Updated to use the provided num_bands
-            resolution=resolution_3d,
+            resolution=string_to_vector3(resolution_3d),
             interp=interpolation,
             periods=periods_for_epsilon_plot,
             pickle_id=crystal_id,
@@ -299,7 +308,7 @@ def save_crystal(n_clicks, previous_message):
     print("saved")
     
 
-    {
+    return {
         'content': b64,
         'filename': f'crystal_configuration_{configuration_active["crystal_id"]}.pkl',
         'base64': True
@@ -373,7 +382,7 @@ def plot_epsilon(epsilon_fig):
         epsilon_fig = crystal_active.plot_epsilon_interactive(opacity=0.2, 
                                                               colorscale='matter', 
                                                               override_resolution_with=-1,
-                                                              periods=2)
+                                                              periods=configuration_active["periods_for_epsilon_plot"])
     else:
         return go.Figure(),  msg + "\nInvalid crystal type selected."
     
@@ -389,23 +398,30 @@ def run_simulation(crystal):
     
     if crystal.has_been_run is False:
         crystal.set_solver()
-        crystal.run_simulation("run_tm")   #tm
-        crystal.run_simulation("run_te")   #te
+        crystal.run_simulation(runner_1 = configuration_active["runner_1"])   #tm
+        crystal.run_simulation(runner_1 = configuration_active["runner_2"])   #te
         crystal.extract_data()
         crystal.has_been_run = True
     
-
+    
+    colors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'brown', 'black', 'white']
+    bands_fig = go.Figure()
     if isinstance(crystal, Crystal2D):
         epsilon_fig = crystal.plot_epsilon_interactive()
         epsilon_fig.update_layout(width=700, height=700)
-        bands_fig = crystal.plot_bands_interactive(polarization="tm", color="blue")
-        crystal.plot_bands_interactive(polarization="te", color="red", fig=bands_fig)
+        for i, polarization in enumerate(crystal.freqs):
+            color = colors[i % len(colors)]
+            bands_fig = crystal.plot_bands_interactive(polarization=polarization, color=color, fig=bands_fig)
         bands_fig.update_layout(width=700, height=700)
     elif isinstance(crystal, CrystalSlab):
-        epsilon_fig = crystal.plot_epsilon_interactive(opacity=0.2, colorscale='matter', override_resolution_with=-1, periods=2)
+        epsilon_fig = crystal_active.plot_epsilon_interactive(opacity=0.2, 
+                                                              colorscale='matter', 
+                                                              override_resolution_with=-1,
+                                                              periods=configuration_active["periods_for_epsilon_plot"])
         epsilon_fig.update_layout(width=700, height=700)
-        bands_fig = crystal.plot_bands_interactive(polarization="te", color="blue")
-        crystal.plot_bands_interactive(polarization="tm", color="red", fig=bands_fig)
+        for i, polarization in enumerate(crystal.freqs):
+            color = colors[i % len(colors)]
+            bands_fig = crystal.plot_bands_interactive(polarization=polarization, color=color, fig=bands_fig)
         bands_fig.update_layout(width=700, height=700)
     else:
         empty_fig = go.Figure().update_layout(title="Invalid crystal type selected.", width=700, height=700)
@@ -468,7 +484,7 @@ def update_field_plots(clickData, te_field_fig, tm_field_fig, previous_message):
     if crystal_active is None:
         return te_field_fig, tm_field_fig, previous_message + "\nNo active crystal for field plotting."
 
-    if  crystal_active.has_bee_run is False:
+    if  crystal_active.has_been_run is False:
         return te_field_fig, tm_field_fig, previous_message + "\nSimulation not yet run. Please run the simulation first."
 
     # Extract the selected k-point data from the clicked bands plot
@@ -477,8 +493,23 @@ def update_field_plots(clickData, te_field_fig, tm_field_fig, previous_message):
 
     # Generate the TE and TM field plots
     print(f"calculating fields at k-point: {kx:.3f}, {ky:.3f}, {kz:.3f}")
-    te_field_fig = crystal_active.plot_field_interactive(runner="run_te", k_point=k_point,  title="TE-like Field")
-    tm_field_fig = crystal_active.plot_field_interactive(runner="run_tm", k_point=k_point,  title="TM-like Field")
+    runner_titles = {
+        'run_te': 'TE Field',
+        'run_tm': 'TM Field',
+        'run_zeven': 'TE-like Field',
+        'run_zodd': 'TM-like Field'
+    }
+
+    te_title = runner_titles[configuration_active["runner_1"]]
+    tm_title = runner_titles[configuration_active["runner_2"]]
+    te_field_fig = crystal_active.plot_field_interactive(runner=configuration_active["runner_1"], 
+                                                         k_point=k_point,  
+                                                         title=te_title,
+                                                         periods = configuration_active["periods_for_field_plot"])
+    tm_field_fig = crystal_active.plot_field_interactive(runner=configuration_active["runner_2"], 
+                                                         k_point=k_point,  
+                                                         title=tm_title,
+                                                         periods = configuration_active["periods_for_field_plot"])
 
     new_message = previous_message + f"\nFields plotted for k-point ({kx:.3f}, {ky:.3f}, {kz:.3f})."
     
