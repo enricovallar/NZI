@@ -137,14 +137,14 @@ class PhotonicCrystal:
     def plot_bands_interactive(self, polarization="te", title='Bands', fig=None, color='blue'):
         """
         Plot the band structure of the photonic crystal interactively using Plotly, 
-        with k-points displayed on hover and click events to trigger external scripts.
+        with k-points displayed on hover, click, and rectangular selection events.
+        Supports rectangular selection and toggling visibility by clicking on legend.
         """
         if self.freqs[polarization] is None:
             print("Simulation not run yet. Please run the simulation first.")
             return
         freqs = self.freqs[polarization]
         gaps = self.gaps[polarization]
-        
 
         xs = list(range(len(freqs)))
 
@@ -154,8 +154,8 @@ class PhotonicCrystal:
         if fig is None:
             fig = go.Figure()
 
-        # Iterate through each frequency band
-        for band in zip(*freqs):
+        # Iterate through each frequency band and add them to the plot
+        for band_index, band in enumerate(zip(*freqs)):
             # Generate hover text with the corresponding k-point and frequency
             hover_texts = [
                 f"k-point: ({kp.x:.4f}, {kp.y:.4f}, {kp.z:.4f})<br>frequency: {f:.4f}"
@@ -169,11 +169,16 @@ class PhotonicCrystal:
                 line=dict(color=color),
                 text=hover_texts,  # Custom hover text
                 hoverinfo='text',  # Display only the custom hover text
-                customdata=[(kp.x, kp.y, kp.z) for kp in k_points_interpolated],  # Attach k-points as custom data (vector components)
-                showlegend=False  # Hide from legend
+                customdata=[(kp.x, kp.y, kp.z, f) for kp, f in zip(k_points_interpolated, band)],  # Attach k-points and frequency as custom data
+                showlegend=False,  # Hide from legend (we’ll add a separate legend entry)
+                legendgroup=polarization,  # Group traces by polarization for toggling visibility
+                visible=True,  # Initially visible
+                selectedpoints=[],  # Placeholder for selected points
+                selected=dict(marker=dict(color="red", size=10)),  # Change color and size of selected points
+                unselected=dict(marker=dict(opacity=0.3))  # Make unselected points more transparent
             ))
 
-        # Add bandgap shading
+        # Add bandgap shading (optional, grouped with the polarization for toggling visibility)
         for gap in gaps:
             if gap[0] > 1:
                 fig.add_shape(
@@ -184,15 +189,21 @@ class PhotonicCrystal:
                     y1=gap[2],
                     fillcolor=color, 
                     opacity=0.2, 
-                    line_width=0
+                    line_width=0,
+                    layer="below",
+                    legendgroup=polarization,  # Group shading with the same polarization
+                    visible=True  # Initially visible
                 )
 
-        # Add legend entries for each polarization
+        # Add a single legend entry for toggling visibility
         fig.add_trace(go.Scatter(
             x=[None], y=[None],
             mode='lines',
             line=dict(color=color),
-            name=f'{polarization.upper()}'
+            name=f'{polarization.upper()}',  # Legend entry for the polarization
+            legendgroup=polarization,  # Group with the same polarization traces
+            showlegend=True,  # Show the legend entry
+            visible=True,  # Initially visible
         ))
 
         # Customize the x-axis with the high symmetry points
@@ -200,18 +211,43 @@ class PhotonicCrystal:
         fig.update_layout(
             title=title,
             xaxis=dict(
-            tickmode='array',
-            tickvals=[i * (len(freqs) - 4) / 3 + i for i in range(4)],
-            ticktext=list(k_high_sym.keys()) + [list(k_high_sym.keys())[0]]  # Repeat the first element at the end
+                tickmode='array',
+                tickvals=[i * (len(freqs) - 4) / 3 + i for i in range(4)],
+                ticktext=list(k_high_sym.keys()) + [list(k_high_sym.keys())[0]]  # Repeat the first element at the end
             ),
             yaxis_title='frequency (c/a)',
-            showlegend=True
+            showlegend=True,
+            dragmode='select',  # Enables rectangular selection
+            clickmode='event+select',  # Enable click events and selection events
+            legend=dict(  # This ensures that clicking the legend will toggle visibility
+                itemclick="toggle",  # Toggle visibility when clicked
+                itemdoubleclick="toggleothers"  # Double-click to hide/show other entries
+            )
         )
+
         
+
+        # # Configure selection attributes and event handling
+        # fig.update_layout(
+        #     title=f"{title} (Select points by dragging or click on a point)",
+        #     hovermode="closest",
+        #     plot_bgcolor='rgba(0,0,0,0)',  # Make background transparent for better visibility
+        #     margin=dict(l=50, r=50, b=50, t=100, pad=4)
+        # )
+
+        # # Handle click and selection events
+        # fig.update_traces(
+        #     selector=dict(mode='markers+lines'),
+        #     marker=dict(symbol='circle', size=6),  # Regular points
+        #     selected=dict(marker=dict(color='red', size=12)),  # Selected points
+        #     unselected=dict(marker=dict(opacity=0.3))  # Make unselected points more transparent
+        # )
+
         # Add a JavaScript callback to handle clicks
         fig.update_layout(
             clickmode='event+select'  # Enable click events
         )
+
 
         return fig
 
@@ -342,32 +378,32 @@ class Crystal2D(PhotonicCrystal):
             freqs.append(ms.freqs[band-1])
 
         self.ms.get_freqs
-       
-        if runner == "run_te" or runner == "run_zeven":
-            self.ms.run_te(mpb.output_at_kpoint(k_point, mpb.fix_hfield_phase, get_zodd_fields, get_freqs))
-            field_type = "H-field"
-            print(f"frequencies: {freqs}")
-            
-        elif runner == "run_tm" or runner == "run_zodd":
-            self.ms.run_tm(mpb.output_at_kpoint(k_point, mpb.fix_efield_phase, get_zeven_fields, get_freqs))
-            field_type = "E-field"
-            print(f"frequencies: {freqs}")
-            
-        else:
-            raise ValueError("Invalid runner. Please enter 'run_te', 'run_zeven', or 'run_tm' or 'run_zodd'.")
         
-        md = mpb.MPBData(rectify=True, periods=periods, resolution=self.resolution)
-
-        fields = []        
-        for field in raw_fields:
-            field = field[..., 0, 2]  # Get just the z component of the fields
+        with suppress_output():
+            if runner == "run_te" or runner == "run_zeven":
+                self.ms.run_te(mpb.output_at_kpoint(k_point, mpb.fix_hfield_phase, get_zodd_fields, get_freqs))
+                field_type = "H-field"
+                print(f"frequencies: {freqs}")
+                
+            elif runner == "run_tm" or runner == "run_zodd":
+                self.ms.run_tm(mpb.output_at_kpoint(k_point, mpb.fix_efield_phase, get_zeven_fields, get_freqs))
+                field_type = "E-field"
+                print(f"frequencies: {freqs}")
+                
+            else:
+                raise ValueError("Invalid runner. Please enter 'run_te', 'run_zeven', or 'run_tm' or 'run_zodd'.")
             
-            fields.append(md.convert(field))
+            md = mpb.MPBData(rectify=True, periods=periods, resolution=self.resolution)
+            fields = []        
+            for field in raw_fields:
+                field = field[..., 0, 2]  # Get just the z component of the fields
+                
+                fields.append(md.convert(field))
 
-           
-           
+            
+            
             eps = md.convert(self.ms.get_epsilon())
-        print(fields)
+        #print(fields)
         num_plots = len(fields)
         if num_plots == 0:
             print("No field data to plot.")
@@ -725,44 +761,45 @@ class CrystalSlab(PhotonicCrystal):
                 freqs.append(ms.freqs[band-1])
 
             
-        
-            if runner == "run_te" or runner == "run_zeven":
-                ms.run_te(mpb.output_at_kpoint(k_point, mpb.fix_hfield_phase, get_zodd_fields, get_freqs))
-                field_type = "H-field"
-                print(f"frequencies: {freqs}")
+            with suppress_output():
+                if runner == "run_te" or runner == "run_zeven":
+                    ms.run_te(mpb.output_at_kpoint(k_point, mpb.fix_hfield_phase, get_zodd_fields, get_freqs))
+                    field_type = "H-field"
+                    # print(f"frequencies: {freqs}")
+                    
+                elif runner == "run_tm" or runner == "run_zodd":
+                    ms.run_tm(mpb.output_at_kpoint(k_point, mpb.fix_efield_phase, get_zeven_fields, get_freqs))
+                    field_type = "E-field"
+                    
+                    # print(f"frequencies: {freqs}")
+                    
+                else:
+                    raise ValueError("Invalid runner. Please enter 'run_te', 'run_zeven', or 'run_tm' or 'run_zodd'.")
+            
+                md = mpb.MPBData(rectify=True, periods=periods)
+                eps = md.convert(ms.get_epsilon())
                 
-            elif runner == "run_tm" or runner == "run_zodd":
-                ms.run_tm(mpb.output_at_kpoint(k_point, mpb.fix_efield_phase, get_zeven_fields, get_freqs))
-                field_type = "E-field"
-                print(f"frequencies: {freqs}")
+                z_points = eps.shape[2]//periods
+                z_mid = eps.shape[2]//2
                 
-            else:
-                raise ValueError("Invalid runner. Please enter 'run_te', 'run_zeven', or 'run_tm' or 'run_zodd'.")
+                #now take only epsilon in the center of the slab
+                eps = eps[..., z_mid]
             
-            md = mpb.MPBData(rectify=True, periods=periods)
-            eps = md.convert(ms.get_epsilon())
-            
-            z_points = eps.shape[2]//periods
-            z_mid = eps.shape[2]//2
-            
-            #now take only epsilon in the center of the slab
-            eps = eps[..., z_mid]
-           
 
-            fields = []        
-            for field in raw_fields:
+                fields = []        
+                for field in raw_fields:
+                    
+                    field = field[..., z_points // 2, 2]  # Get just the z component of the fields in the center
+                    fields.append(md.convert(field))
                 
-                field = field[..., z_points // 2, 2]  # Get just the z component of the fields in the center
-                fields.append(md.convert(field))
-            
-            
-            
-            print(f"Epsilon shape: {eps.shape}")
-            print(f"Field shape: {fields[-1].shape}")
-            num_plots = len(fields)
-            if num_plots == 0:
-                print("No field data to plot.")
-                return
+                
+                
+                # print(f"Epsilon shape: {eps.shape}")
+                # print(f"Field shape: {fields[-1].shape}")
+                num_plots = len(fields)
+                if num_plots == 0:
+                    print("No field data to plot.")
+                    return
 
             if fig is None:
                 fig = go.Figure()

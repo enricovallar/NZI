@@ -398,8 +398,8 @@ def run_simulation(crystal):
     
     if crystal.has_been_run is False:
         crystal.set_solver()
-        crystal.run_simulation(runner_1 = configuration_active["runner_1"])   #tm
-        crystal.run_simulation(runner_1 = configuration_active["runner_2"])   #te
+        crystal.run_simulation(runner = configuration_active["runner_1"])   #tm
+        crystal.run_simulation(runner = configuration_active["runner_2"])   #te
         crystal.extract_data()
         crystal.has_been_run = True
     
@@ -486,9 +486,10 @@ def update_field_plots(clickData, te_field_fig, tm_field_fig, previous_message):
 
     if  crystal_active.has_been_run is False:
         return te_field_fig, tm_field_fig, previous_message + "\nSimulation not yet run. Please run the simulation first."
-
+    
+    
     # Extract the selected k-point data from the clicked bands plot
-    kx, ky, kz = clickData['points'][0]['customdata']
+    kx, ky, kz, f = clickData['points'][0]['customdata']
     k_point = mp.Vector3(kx, ky, kz)
 
     # Generate the TE and TM field plots
@@ -499,7 +500,7 @@ def update_field_plots(clickData, te_field_fig, tm_field_fig, previous_message):
         'run_zeven': 'TE-like Field',
         'run_zodd': 'TM-like Field'
     }
-
+    
     te_title = runner_titles[configuration_active["runner_1"]]
     tm_title = runner_titles[configuration_active["runner_2"]]
     te_field_fig = crystal_active.plot_field_interactive(runner=configuration_active["runner_1"], 
