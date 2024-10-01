@@ -8,6 +8,7 @@ import os
 import sys
 import plotly.graph_objects as go
 import numpy as np
+import group_theory_analysis as gta
 
 class PhotonicCrystal:
     def __init__(self,
@@ -42,7 +43,7 @@ class PhotonicCrystal:
         self.freqs = {}
         self.gaps = {}
         self.epsilon = None
-        self.fields ={}
+        self.fields = {}
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -81,39 +82,29 @@ class PhotonicCrystal:
                                     resolution=self.resolution,
                                     num_bands=self.num_bands)
 
-    def run_simulation(self, 
-                       runner_1="run_zeven",
-                       runner_2 = None):
+    def run_simulation(self, runner="run_zeven", polarization=None):
         """
         Run the simulation to calculate the frequencies and gaps.
         
         Parameters:
-        - type: The polarization type ('tm' or 'te' or 'both'). Default is 'both'.
-        - runner: The name of the function to run the simulation. Default is None
+        - runner: The name of the function to run the simulation. Default is 'run_zeven'.
         """
         if self.ms is None:
             raise ValueError("Solver is not set. Call set_solver() before running the simulation.")
-
-        if runner_1.startswith("run_"):
-            polarization_1 = runner_1[4:]
+        
+        if polarization is not None:
+            polarization = polarization
         else:
-            polarization_1 = runner_1
-
-        if runner_2 is not None:
-            if runner_2.startswith("run_"):
-                polarization_2 = runner_2[4:]
+            if runner.startswith("run_"):
+                polarization = runner[4:]
             else:
-                polarization_2 = runner_2
+                polarization = runner
+        
         with suppress_output():
+            getattr(self.ms, runner)()
+            self.freqs[polarization] = self.ms.all_freqs
+            self.gaps[polarization] = self.ms.gap_list
             
-            getattr(self.ms, runner_1)()
-            self.freqs[polarization_1] = self.ms.all_freqs
-            self.gaps[polarization_1]  = self.ms.gap_list
-
-            if runner_2 is not None:
-                getattr(self.ms, runner_2)()
-                self.freqs[polarization_2] = self.ms.all_freqs
-                self.gaps[polarization_2]  = self.ms.gap_list
 
     def run_dumb_simulation(self):
         """
@@ -846,42 +837,49 @@ def test_slab():
     
 
     # Define basic parameters
-    geometry = CrystalSlab.basic_geometry(radius_1=0.35, eps_atom_1=1, eps_bulk=12, eps_background=1, eps_substrate=1.45**2)
-    num_bands = 4
-    resolution = mp.Vector3(32, 32, 16)
-    interp = 2
-    periods = 5
+    geometry = Crystal2D.basic_geometry(radius_1=0.35, eps_atom_1=1, eps_bulk=12)
+    num_bands = 6
+    resolution = 32
+    interp = 4
+    periods = 3
     lattice_type = 'square'
-    pickle_id = 'test_crystal_slab'
+    pickle_id = 'test_crystal_2d'
 
-    # Create an instance of the CrystalSlab class
-    crystal_slab = CrystalSlab(lattice_type=lattice_type, 
-                                num_bands=num_bands, 
-                                resolution=resolution, 
-                                interp=interp, 
-                                periods=periods, 
-                                pickle_id=pickle_id,
-                                geometry=geometry)
+    # Create an instance of the Crystal2D class
+    crystal_2d = Crystal2D(lattice_type=lattice_type, 
+                           num_bands=num_bands, 
+                           resolution=resolution, 
+                           interp=interp, 
+                           periods=periods, 
+                           pickle_id=pickle_id,
+                           geometry=geometry)
 
-    crystal_slab.run_dumb_simulation()
-    print("dummy simulation runned")
+    # Set the solver
+    crystal_2d.set_solver()
+    crystal_2d.run_simulation(runner="run_tm")
+    print("Dummy simulation run")
+
     # Extract data
-
-    crystal_slab.extract_data(periods=1)
-    print("data extracted")
+    crystal_2d.extract_data(periods=1)
+    print("Data extracted")
 
     # Plot epsilon interactively
-    print("start plotting")
-    fig_eps = crystal_slab.plot_epsilon_interactive(colorscale = "matter", 
-                                                              opacity=0.2,
-                                                              override_resolution_with=16, 
-                                                              periods = 2)
-    print("ready to show")
+    print("Start plotting epsilon")
+    fig_eps = crystal_2d.plot_epsilon_interactive()
+    print("Ready to show epsilon plot")
     fig_eps.show()
 
-    fig_field = crystal_slab.plot_field_interactive(runner="run_tm", k_point=mp.Vector3(0, 0), periods=5)
+    # Plot bands interactively
+    print("Start plotting bands")
+    fig_bands = crystal_2d.plot_bands_interactive(polarization="tm", title='Bands', color='blue')
+    print("Ready to show bands plot")
+    fig_bands.show()
+
+    # Plot field interactively
+    print("Start plotting field")
+    fig_field = crystal_2d.plot_field_interactive(runner="run_tm", k_point=mp.Vector3(0, 0), periods=5)
+    print("Ready to show field plot")
     fig_field.show()
-    
 
     
 
