@@ -43,7 +43,7 @@ class PhotonicCrystal:
         self.freqs = {}
         self.gaps = {}
         self.epsilon = None
-        self.fields = {}
+        self.modes= []
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -227,26 +227,13 @@ class PhotonicCrystal:
 
         
 
-        # # Configure selection attributes and event handling
-        # fig.update_layout(
-        #     title=f"{title} (Select points by dragging or click on a point)",
-        #     hovermode="closest",
-        #     plot_bgcolor='rgba(0,0,0,0)',  # Make background transparent for better visibility
-        #     margin=dict(l=50, r=50, b=50, t=100, pad=4)
-        # )
-
-        # # Handle click and selection events
-        # fig.update_traces(
-        #     selector=dict(mode='markers+lines'),
-        #     marker=dict(symbol='circle', size=6),  # Regular points
-        #     selected=dict(marker=dict(color='red', size=12)),  # Selected points
-        #     unselected=dict(marker=dict(opacity=0.3))  # Make unselected points more transparent
-        # )
-
-        # Add a JavaScript callback to handle clicks
+        # Add a JavaScript callback to handle select events
         fig.update_layout(
             clickmode='event+select'  # Enable click events
         )
+
+        
+
 
 
         return fig
@@ -277,6 +264,19 @@ class PhotonicCrystal:
     @staticmethod
     def basic_lattice():
         raise NotImplementedError
+    
+
+    def find_modes_symmetries(self):
+        if self.freqs is None:
+            raise ValueError("Frequencies are not calculated. Run the simulation first.")
+       
+        symmetries = {}
+        for mode in self.modes:
+            mode["symmetries"] = gta.test_symmetries(np.array(mode["field"]))
+            
+
+        
+        return symmetries
     
 
 
@@ -450,6 +450,18 @@ class Crystal2D(PhotonicCrystal):
                                         args=[{'visible': visible_status},  # Update visibility for both eps and field
                                             {'title':f"{title}<br>Mode {i + 1}, freq={freq:0.3f}: {subtitle}"}
                                         ]))
+            mode = {
+                "k_point" : k_point,
+                "frequency" : freq,
+                "field" : field,
+                "field_type" : field_type,
+            }
+            
+
+            self.modes.append(mode) 
+
+
+               
 
         # Add the dropdown menu to the layout
         fig.update_layout(
@@ -464,6 +476,14 @@ class Crystal2D(PhotonicCrystal):
             hovermode="closest",
             width=800, height=800
         )
+        self.find_modes_symmetries()
+        for mode in self.modes:
+            print(mode["symmetries"])
+        
+
+
+
+        
 
         # Display the plot
         return fig
