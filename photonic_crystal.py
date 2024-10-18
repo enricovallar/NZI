@@ -9,6 +9,9 @@ import sys
 import plotly.graph_objects as go
 import numpy as np
 import group_theory_analysis as gta
+from plotly.subplots import make_subplots
+from collections import defaultdict
+
 
 class PhotonicCrystal:
     def __init__(self,
@@ -17,7 +20,9 @@ class PhotonicCrystal:
                 resolution: tuple[int, int] | int = 32,
                 interp: int = 4,
                 periods: int = 3, 
-                pickle_id = None):
+                pickle_id = None, 
+                k_points = None, 
+                ):
         
         self.lattice_type = lattice_type
         self.num_bands = num_bands
@@ -29,7 +34,10 @@ class PhotonicCrystal:
 
         #this values are set with basic lattice method
         self.geometry_lattice= None 
-        self.k_points = None
+        self.k_points = k_points
+        if self.k_points is not None:
+            self.k_points_interpolated = mp.interpolate(self.interp, self.k_points)
+        
         #slef.geometry_lattice, self.k_points = self.basic_lattice()
 
         #this values are set with basic geometry method
@@ -100,11 +108,27 @@ class PhotonicCrystal:
             else:
                 polarization = runner
         
+
+        
+        
+        def get_mode_data(ms, band):
+            mode = {
+                "h_field": ms.get_hfield(band, bloch_phase=True),
+                "e_field": ms.get_efield(band, bloch_phase=True),
+                "freq": ms.freqs[band-1],
+                "k_point": ms.current_k,
+                "polarization": polarization
+            }
+            self.modes.append(mode)
+    
+
+    
+        print(self.k_points_interpolated)
         with suppress_output():
-            getattr(self.ms, runner)()
+            getattr(self.ms, runner)(get_mode_data)
             self.freqs[polarization] = self.ms.all_freqs
             self.gaps[polarization] = self.ms.gap_list
-            
+        print(self.modes[1])
 
     def run_dumb_simulation(self):
         """
@@ -225,16 +249,10 @@ class PhotonicCrystal:
             )
         )
 
-        
-
         # Add a JavaScript callback to handle select events
         fig.update_layout(
             clickmode='event+select'  # Enable click events
         )
-
-        
-
-
 
         return fig
 
@@ -269,14 +287,163 @@ class PhotonicCrystal:
     def find_modes_symmetries(self):
         if self.freqs is None:
             raise ValueError("Frequencies are not calculated. Run the simulation first.")
-       
         symmetries = {}
         for mode in self.modes:
             mode["symmetries"] = gta.test_symmetries(np.array(mode["field"]))
-            
+        return symmetries
+    
+
+
+    def plot_mode_field_vector(self, mode):
+        fields = [mode["e_field"], mode["h_field"]]
+        names = ["Electric Field", "Magnetic Field"]
+        sizerefs = [1, 1]
+        fig = self._plot_field_vector(fields, names, sizerefs)
+        return fig
+    
+
+    def plot_mode_fields_norm_to_k(self, mode, k):
+        fields = [mode["e_field"], mode["h_field"]]
+        fields_norm_to_k = self._calculate_field_norm_to_k(fields, k)
+        names = [f"Electric Field (Perpendicular to k={k})", f"Magnetic Field (Perpendicular to k={k})"]
+        sizerefs = [1, 1]
+        fig = self._plot_field_vector(fields_norm_to_k, names, sizerefs)
+        return fig
+    
+    
+    
+
+    def group_modes_by_k_point(self):
+        """
+        Groups modes by their k_point.
+
+        Returns:
+            list: A list of groups where each group contains modes with the same k_point.
+        """
+        # Use defaultdict to automatically create a list for each unique k_point
+        k_point_groups = defaultdict(list)
+
+        if not self.modes:
+            raise ValueError("Modes are not calculated. Run the simulation first.")
+
+        # Iterate through each mode
+        for mode in self.modes:
+            # Get the k_point of the current mode (assume mode["k_point"] exists)
+            k_point = tuple(mode["k_point"])  # Use tuple since lists are not hashable
+            # Append the mode to the corresponding k_point group
+            k_point_groups[k_point].append(mode)
+
+        # Return the groups as a list of lists
+        return list(k_point_groups.values())
 
         
-        return symmetries
+    
+
+
+
+    def _plot_field_vector(fields, names=["Field 1", "Field 2"], sizerefs =[1,1], fig=None):
+        """
+        Plots a 3D cone plot of one or two vector fields using Plotly.
+
+        Parameters:
+        fields (list of numpy.ndarray): A list containing one or two 4D numpy arrays representing the vector fields. 
+                                        The last dimension should have size 3, corresponding to the x, y, and z components of the field.
+        names (list of str): A list containing the names of the fields to be used as subplot titles.
+        fig (plotly.graph_objs._figure.Figure, optional): An existing Plotly figure to which the cone plot will be added. 
+                                                        If None, a new figure will be created.
+
+        Returns:
+        None: The function displays the plot using Plotly's `show` method.
+        """
+        
+        # Determine the number of subplots based on the number of fields
+        num_fields = len(fields)
+        if num_fields == 1:
+            rows, cols = 1, 1
+        elif num_fields == 2:
+            rows, cols = 1, 2
+        else:
+            raise ValueError("fields list can only contain one or two fields.")
+        
+        if fig is None:
+            # Create subplots if no figure is provided, with titles for each subplot
+            fig = make_subplots(rows=rows, cols=cols, specs=[[{'type': 'cone'} for _ in range(cols)]],
+                                subplot_titles=names)
+
+        for i, field in enumerate(fields):
+            # Extract the real parts of the field components
+            field_x = np.real(field[..., 0])
+            field_y = np.real(field[..., 1])
+            field_z = np.real(field[..., 2])
+
+            # Create a meshgrid for the x, y, z coordinates
+            x, y, z = np.meshgrid(np.arange(field.shape[0]), np.arange(field.shape[1]), np.arange(field.shape[2]))
+
+            # Add a cone plot to the figure
+            # Adjust colorbar position to be next to the respective subplot
+            fig.add_trace(go.Cone(
+                x=x.flatten(),
+                y=y.flatten(),
+                z=z.flatten(),
+                u=field_x.flatten(),
+                v=field_y.flatten(),
+                w=field_z.flatten(),
+                sizemode='scaled',
+                anchor = 'tail',
+                sizeref=sizerefs[i],
+                colorbar=dict(
+                    x=0.45 if i == 0 else 0.95,  # Position colorbar near the first and second subplot
+                    y=0.5,  # Vertically center the colorbar
+                    thickness=15,
+                    len=0.75  # Adjust the length of the colorbar
+                )
+            ), row=1, col=i+1)
+
+        # Update layout for subplots, adjust margins
+        fig.update_layout(
+            title='3D Cone Plot of Vector Fields',
+            margin=dict(l=50, r=50, t=50, b=50)  # Adjust subplot margins
+        )
+
+        # Show the figure
+        fig.show()
+
+
+
+    def _calculate_field_norm_to_k(fields, k):
+        """
+        Calculate the components of the field perpendicular to the wavevector k for each field in the list.
+
+        Args:
+        - fields: A list of numpy arrays, each of shape (Nx, Ny, Nz, 3), where the last dimension contains the x, y, z components of the field.
+        - k: A numpy array of shape (3,), representing the wavevector [kx, ky, kz].
+        
+        Returns:
+        - fields_norm_to_k: A list of numpy arrays, each of shape (Nx, Ny, Nz, 3), representing the field perpendicular to k for each input field.
+        """
+        fields_norm_to_k = []
+        
+        for field in fields:
+            # Normalize the wavevector k
+            k_norm = k / np.linalg.norm(k)
+            
+            # Compute the dot product of each field vector with the normalized k
+            dot_product = np.einsum('ijkl,l->ijk', field, k_norm)  # Efficiently computes the dot product
+            
+            # Compute the parallel component of the field: (dot_product * k_norm)
+            field_parallel = np.outer(dot_product, k_norm).reshape(field.shape)
+            
+            # Subtract the parallel component to get the perpendicular component
+            field_norm_to_k = field - field_parallel
+            
+            fields_norm_to_k.append(field_norm_to_k)
+        
+        return fields_norm_to_k
+
+
+
+
+
     
 
 
@@ -377,7 +544,6 @@ class Crystal2D(PhotonicCrystal):
         def get_freqs(ms, band):
             freqs.append(ms.freqs[band-1])
 
-        self.ms.get_freqs
         
         with suppress_output():
             if runner == "run_te" or runner == "run_zeven":
@@ -932,12 +1098,7 @@ def test_slab():
     print("Ready to show bands plot")
     fig_bands.show()
 
-    # Plot field interactively
-    print("Start plotting field")
-    fig_field = crystal_2d.plot_field_interactive(runner="run_tm", k_point=mp.Vector3(0, 0), periods=5)
-    print("Ready to show field plot")
-    fig_field.show()
-
+ 
     
 
  
