@@ -13,6 +13,7 @@ from plotly.subplots import make_subplots
 from collections import defaultdict
 
 
+
 class PhotonicCrystal:
     def __init__(self,
                 lattice_type = None,
@@ -294,12 +295,110 @@ class PhotonicCrystal:
     
 
 
-    def plot_mode_field_vector(self, mode):
-        fields = [mode["e_field"], mode["h_field"]]
-        names = ["Electric Field", "Magnetic Field"]
-        sizerefs = [1, 1]
-        fig = self._plot_field_vector(fields, names, sizerefs)
-        return fig
+    def plot_modes_vectorial_fields(self, modes, sizemode="scaled", names=["Electric Field", "Magnetic Field"]):
+        
+        colorscales = ["blues", "reds", "greens", "purples", "oranges", "ylorbr"]
+        
+        h_fields = [mode["h_field"] for mode in modes]
+        e_fields = [mode["e_field"] for mode in modes]
+
+        max_norm_h = PhotonicCrystal._calculate_fields_max_norms(h_fields)
+        max_norm_e = PhotonicCrystal._calculate_fields_max_norms(e_fields)
+        
+        e_sizeref = max_norm_e
+        h_sizeref = max_norm_h
+
+        e_clim = (0, max_norm_e)
+        h_clim= (0, max_norm_h)
+
+
+        e_fig = go.Figure()
+        h_fig = go.Figure()
+        
+        e_cones = PhotonicCrystal._fields_to_cones(e_fields, colorscale=colorscales[0], sizemode=sizemode, sizeref=e_sizeref, clim=e_clim, colorscales=colorscales)
+        h_cones = PhotonicCrystal._fields_to_cones(h_fields, colorscale=colorscales[1], sizemode=sizemode, sizeref=h_sizeref, clim=h_clim, colorscales=colorscales) 
+
+
+        for e_cone in e_cones:  
+            e_fig.add_trace(e_cone)
+        for h_cone in h_cones:
+            h_fig.add_trace(h_cone)
+
+        
+        e_fig.update_layout(
+            title=names[0],
+            scene=dict(
+            xaxis=dict(title='X'),
+            yaxis=dict(title='Y'),
+            zaxis=dict(title='Z')
+            ),
+            margin=dict(l=0, r=0, b=0, t=40),
+            showlegend=True
+        )
+
+        h_fig.update_layout(
+            title=names[1],
+            scene=dict(
+            xaxis=dict(title='X'),
+            yaxis=dict(title='Y'),
+            zaxis=dict(title='Z')
+            ),
+            margin=dict(l=0, r=0, b=0, t=40),
+            showlegend=True
+        )
+
+        return e_fig, h_fig
+        
+        
+    def plot_modes_vectorial_fields_summed(self, modes, sizemode = "scaled", colorscale = "Viridis", names=["Electric Field", "Magnetic Field"]):
+        h_fields = [mode["h_field"] for mode in modes]
+        e_fields = [mode["e_field"] for mode in modes]
+
+        h_field_sum = PhotonicCrystal.sum_fields(h_fields)
+        e_field_sum = PhotonicCrystal.sum_fields(e_fields)
+
+        max_norm_h = PhotonicCrystal._calculate_fields_max_norms([h_field_sum])
+        max_norm_e = PhotonicCrystal._calculate_fields_max_norms([e_field_sum])
+
+        e_sizeref = max_norm_e
+        h_sizeref = max_norm_h
+
+        e_clim = (0, max_norm_e)
+        h_clim= (0, max_norm_h)
+
+        e_fig = go.Figure()
+        h_fig = go.Figure()
+
+        e_fig.add_trace(PhotonicCrystal._field_to_cones(e_field_sum, colorscale=colorscale, sizemode=sizemode, sizeref=e_sizeref, clim=e_clim))
+        h_fig.add_trace(PhotonicCrystal._field_to_cones(h_field_sum, colorscale=colorscale, sizemode=sizemode, sizeref=h_sizeref, clim=h_clim))
+
+        
+        e_fig.update_layout(
+            title=names[0],
+            scene=dict(
+            xaxis=dict(title='X'),
+            yaxis=dict(title='Y'),
+            zaxis=dict(title='Z')
+            ),
+            margin=dict(l=0, r=0, b=0, t=40),
+            showlegend=True
+        )
+
+        h_fig.update_layout(
+            title=names[1],
+            scene=dict(
+            xaxis=dict(title='X'),
+            yaxis=dict(title='Y'),
+            zaxis=dict(title='Z')
+            ),
+            margin=dict(l=0, r=0, b=0, t=40),
+            showlegend=True
+        )
+
+        return e_fig, h_fig
+    
+        
+
     
 
     def plot_mode_fields_norm_to_k(self, mode, k):
@@ -307,109 +406,114 @@ class PhotonicCrystal:
         fields_norm_to_k = self._calculate_field_norm_to_k(fields, k)
         names = [f"Electric Field (Perpendicular to k={k})", f"Magnetic Field (Perpendicular to k={k})"]
         sizerefs = [1, 1]
-        fig = self._plot_field_vector(fields_norm_to_k, names, sizerefs)
+        fig = PhotonicCrystal._plot_field_vector(fields_norm_to_k, names, sizerefs)
         return fig
     
-    
-    
 
-    def group_modes_by_k_point(self):
+    @staticmethod
+    def sum_fields(fields):
         """
-        Groups modes by their k_point.
+        Sum the fields in the list.
+
+        Args:
+            fields (list): A list of numpy arrays, each representing a field of shape (Nx, Ny, Nz, 3).
 
         Returns:
-            list: A list of groups where each group contains modes with the same k_point.
+            numpy.ndarray: The sum of the fields in the list.
         """
-        # Use defaultdict to automatically create a list for each unique k_point
-        k_point_groups = defaultdict(list)
-
-        if not self.modes:
-            raise ValueError("Modes are not calculated. Run the simulation first.")
-
-        # Iterate through each mode
-        for mode in self.modes:
-            # Get the k_point of the current mode (assume mode["k_point"] exists)
-            k_point = tuple(mode["k_point"])  # Use tuple since lists are not hashable
-            # Append the mode to the corresponding k_point group
-            k_point_groups[k_point].append(mode)
-
-        # Return the groups as a list of lists
-        return list(k_point_groups.values())
-
         
+        fields_sum = np.zeros(fields[0].shape, dtype=complex)
+        for field in fields:
+            fields_sum += field
+        return fields_sum
+
     
-
-
-
-    def _plot_field_vector(fields, names=["Field 1", "Field 2"], sizerefs =[1,1], fig=None):
+    
+    
+    
+    @staticmethod
+    def _calculate_norm(field):
         """
-        Plots a 3D cone plot of one or two vector fields using Plotly.
+        Calculate the norm of a field.
+        
+        Args:
+        - field: A numpy array of shape (Nx, Ny, Nz, 3) representing the field.
+        
+        Returns:
+        - norm: A numpy array of shape (Nx, Ny, Nz) representing the norm of the field at each point.
+        """
 
-        Parameters:
-        fields (list of numpy.ndarray): A list containing one or two 4D numpy arrays representing the vector fields. 
-                                        The last dimension should have size 3, corresponding to the x, y, and z components of the field.
-        names (list of str): A list containing the names of the fields to be used as subplot titles.
-        fig (plotly.graph_objs._figure.Figure, optional): An existing Plotly figure to which the cone plot will be added. 
-                                                        If None, a new figure will be created.
+        field_x = np.real(field[..., 0])
+        field_y = np.real(field[..., 1])
+        field_z = np.real(field[..., 2])
+        
+        norm = np.sqrt(field_x**2 + field_y**2 + field_z**2)
+
+        return norm 
+    
+    @staticmethod
+    def _calculate_fields_max_norms(fields):
+        """
+        Calculate the maximum norm of the fields to set the colorscale limits.
+
+        Args:
+            fields (list): A list of numpy arrays, each representing a field of shape (Nx, Ny, Nz, 3).
 
         Returns:
-        None: The function displays the plot using Plotly's `show` method.
+            tuple: A tuple containing the minimum and maximum norms of the fields.
         """
-        
-        # Determine the number of subplots based on the number of fields
-        num_fields = len(fields)
-        if num_fields == 1:
-            rows, cols = 1, 1
-        elif num_fields == 2:
-            rows, cols = 1, 2
-        else:
-            raise ValueError("fields list can only contain one or two fields.")
-        
-        if fig is None:
-            # Create subplots if no figure is provided, with titles for each subplot
-            fig = make_subplots(rows=rows, cols=cols, specs=[[{'type': 'cone'} for _ in range(cols)]],
-                                subplot_titles=names)
+        max_norm = 0
 
-        for i, field in enumerate(fields):
-            # Extract the real parts of the field components
-            field_x = np.real(field[..., 0])
-            field_y = np.real(field[..., 1])
-            field_z = np.real(field[..., 2])
+        # Loop over each field in the fields_list
+        for field in fields:
+            # Compute the norm (magnitude) for each point in space: sqrt(Ex^2 + Ey^2 + Ez^2)
+            norm = PhotonicCrystal._calculate_norm(field)
+            # Find the maximum value of the norm
+            max_norm = max(max_norm, np.max(norm))
+        return float(max_norm)
 
-            # Create a meshgrid for the x, y, z coordinates
-            x, y, z = np.meshgrid(np.arange(field.shape[0]), np.arange(field.shape[1]), np.arange(field.shape[2]))
+    
+    @staticmethod
+    def _field_to_cones(field, colorscale="Viridis", sizemode='absolute', sizeref=1, clim=(0, 1)):
+        field_x = np.real(field[..., 0])
+        field_y = np.real(field[..., 1])
+        field_z = np.real(field[..., 2])
 
-            # Add a cone plot to the figure
-            # Adjust colorbar position to be next to the respective subplot
-            fig.add_trace(go.Cone(
-                x=x.flatten(),
-                y=y.flatten(),
-                z=z.flatten(),
-                u=field_x.flatten(),
-                v=field_y.flatten(),
-                w=field_z.flatten(),
-                sizemode='scaled',
-                anchor = 'tail',
-                sizeref=sizerefs[i],
-                colorbar=dict(
-                    x=0.45 if i == 0 else 0.95,  # Position colorbar near the first and second subplot
-                    y=0.5,  # Vertically center the colorbar
-                    thickness=15,
-                    len=0.75  # Adjust the length of the colorbar
-                )
-            ), row=1, col=i+1)
+        x, y, z = np.meshgrid(np.arange(field.shape[0]), np.arange(field.shape[1]), np.arange(field.shape[2]))
 
-        # Update layout for subplots, adjust margins
-        fig.update_layout(
-            title='3D Cone Plot of Vector Fields',
-            margin=dict(l=50, r=50, t=50, b=50)  # Adjust subplot margins
+
+        cone = go.Cone(
+            x=x.flatten(),
+            y=y.flatten(),
+            z=z.flatten(),
+            u=field_x.flatten(),
+            v=field_y.flatten(),
+            w=field_z.flatten(),
+            anchor='tail',
+            sizemode=sizemode,
+            sizeref=sizeref,
+            colorscale=colorscale,
+            #cmin = clim[0],
+            #cmax = clim[1],
         )
+        return cone
 
-        # Show the figure
-        fig.show()
+        
+    @staticmethod
+    def _fields_to_cones(fields, colorscale="Viridis", sizemode='absolute', sizeref=1, clim=(0, 1), colorscales=None):
+        cones = []
+
+        if colorscales is None:
+            colorscales = ["blues", "reds", "greens", "purples", "oranges", "ylorbr"]
+
+        for i, field in enumerate( fields):
+            cone = PhotonicCrystal._field_to_cones(field, colorscale=colorscales[i], sizemode=sizemode, sizeref=sizeref, clim=clim)
+            cones.append(cone)
+        return cones
 
 
 
+    @staticmethod
     def _calculate_field_norm_to_k(fields, k):
         """
         Calculate the components of the field perpendicular to the wavevector k for each field in the list.
@@ -439,12 +543,151 @@ class PhotonicCrystal:
             fields_norm_to_k.append(field_norm_to_k)
         
         return fields_norm_to_k
+    
 
+    @staticmethod
+    def _maximum_fields_norm(fields_list):
+        """
+        Calculate the maximum norm of the fields to set the colorscale limits.
 
+        Args:
+            fields_list (list): A list of numpy arrays, each representing a field of shape (Nx, Ny, Nz, 3).
 
+        Returns:
+            tuple: A tuple containing the minimum and maximum norms of the fields.
+        """
+        max_norm = 0
 
+        # Loop over each field in the fields_list
+        for field in fields_list:
+            # Compute the norm (magnitude) for each point in space: sqrt(Ex^2 + Ey^2 + Ez^2)
+            norm = np.sqrt(np.sum(np.real(field)**2, axis=-1))  # axis=-1 because we sum over the 3 components (Ex, Ey, Ez)
+
+            # Find the maximum value of the norm
+            max_norm = max(max_norm, np.max(norm))
+        
+
+        return (0, float(max_norm))
 
     
+    @staticmethod
+    def _group_modes_by_polarization(modes):
+        """
+        Groups modes by their polarization.
+
+        Args:
+            modes (list): A list of mode dictionaries, each containing a "polarization" key.
+
+        Returns:
+            dict: A dictionary where keys are polarizations and values are lists of modes with the same polarization.
+        """
+        # Use defaultdict to automatically create a list for each unique polarization
+        polarization_groups = defaultdict(list)
+
+        # Iterate through each mode
+        for mode in modes:
+            # Get the polarization of the current mode (assume mode["polarization"] exists)
+            polarization = mode["polarization"]
+            # Append the mode to the corresponding polarization group
+            polarization_groups[polarization].append(mode)
+
+        # Return the groups as a dictionary
+        return polarization_groups
+
+    @staticmethod
+    def _group_modes_by_k_point(modes):
+        """
+        Groups modes by their k_point.
+
+        Args:
+            modes (list): A list of mode dictionaries, each containing a "k_point" key.
+
+        Returns:
+            dict: A dictionary where keys are k_points and values are dictionaries with the following keys
+                - "modes": A list of modes with the same k_point.
+                - "freq_groups": A list of frequency groups if the modes have been grouped by frequency.
+
+        """
+        # Use defaultdict to automatically create a dictionary for each unique k_point
+        k_point_groups = defaultdict(list)
+
+        # Iterate through each mode
+        for mode in modes:
+            # Get the k_point of the current mode (assume mode["k_point"] exists)
+            k_point = tuple(mode["k_point"])  # Use tuple since lists are not hashable
+            # Append the mode to the corresponding k_point group
+            k_point_groups[k_point].append(mode)
+
+        # Return the groups as a dictionary
+        return k_point_groups
+        
+
+    @staticmethod
+    def _group_modes_by_frequency(modes, frequency_tolerance=0.01):
+        """
+        Groups modes within a given mode group by similar frequencies.
+    
+        Args:
+            mode_group (list): A dlist representing a group of modes. Each mode with a key "freq".                              which is for a list where each mode is a dictionary with a "freq" key.
+            frequency_tolerance (float): The tolerance for frequency similarity. 
+                        Modes within this range are considered similar.
+        
+        Returns:
+            dict: A dictionary where keys are rounded frequencies and values are lists of mode groups with similar frequencies.
+        """
+        # Sort modes by frequency (key "freq") to help with grouping
+        sorted_modes = sorted(modes, key=lambda mode: mode["freq"])
+    
+        # Initialize the list for frequency groups
+        frequency_groups = {}
+        current_group = []
+    
+        # Iterate through sorted modes and group by similar frequencies
+        for mode in sorted_modes:
+            if not current_group or abs(mode["freq"] - current_group[-1]["freq"]) <= frequency_tolerance:
+                # Start a new group if the current group is empty or frequencies are similar
+                current_group.append(mode)
+            else:
+                # Otherwise, finalize the current group and start a new one
+                f_key = round(current_group[-1]["freq"], 4)
+                frequency_groups[f_key] = current_group
+                current_group = [mode]
+        
+        # Add the last group if not empty
+        if current_group:
+            f_key = round(current_group[-1]["freq"], 4)
+            frequency_groups[f_key] = current_group
+       
+    
+        return frequency_groups    
+    
+    def group_modes(self):
+        """
+        Group modes first by k_point and then by frequency within each k_point group.
+
+        Returns:
+        - A dictionary where keys are k_points and values are dictionaries with the following keys:
+            - "modes": A list of modes with the same k_point.
+            - "grouped_by_frequency": A boolean indicating whether the modes have been grouped by frequency.
+            - "freq_groups": A list of frequency groups if the modes have been grouped by frequency.
+        """
+     
+        
+        if not self.modes:
+            raise ValueError("Modes are not calculated. Run the simulation first.")
+        
+        
+        groups = {}
+        polarization_groups = self._group_modes_by_polarization(self.modes)
+        for polarization, modes_p in polarization_groups.items():
+            groups[polarization] = {}
+            k_point_groups = self._group_modes_by_k_point(modes_p)
+            for k_point, modes_p_k in k_point_groups.items():
+                groups[polarization][k_point] = {}
+                frequency_groups = self._group_modes_by_frequency(modes_p_k)
+                for freq, modes_p_k_f in frequency_groups.items():
+                    groups[polarization][k_point][freq] = modes_p_k_f
+        return groups
 
 
 @contextlib.contextmanager

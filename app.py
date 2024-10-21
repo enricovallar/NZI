@@ -17,6 +17,7 @@ from ui_elements import *
 import dash_daq as daq
 
 
+
 def string_to_vector3(vector_string):
     try:
         # Remove the parentheses and split the string by commas
@@ -32,6 +33,7 @@ def string_to_vector3(vector_string):
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], prevent_initial_callbacks='initial_duplicate')
 crystal_active = None 
 configuration_active = None
+active_mode_groups = None
 
 
 # Create the layout
@@ -133,12 +135,57 @@ app.layout = dbc.Container([
         dbc.Col(dcc.Graph(id='bands-graph', style={'height': '700px', 'width': '700px', 'padding-left': '200px'}, clickData=None), width=6),
     ], className="mt-4"),
 
+   
     # Placeholder for field plots (TE-like on the left and TM-like on the right)
     dbc.Row([
         dbc.Col(dcc.Graph(id='te-field-graph', style={'height': '700px', 'width': '700px', 'padding-right': '200px'}), width=6),
         dbc.Col(dcc.Graph(id='tm-field-graph', style={'height': '700px', 'width': '700px', 'padding-left': '200px'}), width=6),
-    ], className="mt-4")
+    ], className="mt-4"),
+    
 
+
+     # Add the title of the section: vectorial field analysis
+    dbc.Row([
+        dbc.Col(html.H4("Vectorial Field Analysis"), width=12)
+    ], className="mt-4"),
+
+    # Dropdown to select the polarization to group modes
+    dbc.Row([
+        dbc.Col(html.Label("Select polarization to group modes:"), width=4),
+        dbc.Col(dcc.Dropdown(id='polarization-group-dropdown', options=[], placeholder="Select polarization"), width=8),
+    ], className="mt-3"),
+
+    # Dropdown to select the k-point to group modes
+    dbc.Row([
+        dbc.Col(html.Label("Select k-point to group modes:"), width=4),
+        dbc.Col(dcc.Dropdown(id='k-point-group-dropdown', options=[], placeholder="Select k-point"), width=8),
+    ], className="mt-3"),
+
+    # Dropdown to select the frequency to group modes
+    dbc.Row([
+        dbc.Col(html.Label("Select frequency to group modes:"), width=4),
+        dbc.Col(dcc.Dropdown(id='frequency-group-dropdown', options=[], placeholder="Select frequency"), width=8),
+    ], className="mt-3"),
+
+    # Dropdown to select one mode in the group to plot
+    dbc.Row([
+        dbc.Col(html.Label("Select mode to plot:"), width=4),
+        dbc.Col(dcc.Dropdown(id='mode-selector-dropdown', options=[], placeholder="Select mode"), width=8),
+    ], className="mt-3"),
+
+    # Buttons to plot the vectorial field
+    dbc.Row([
+        dbc.Col(dbc.Button("Plot Vectorial Fields", id="plot-vectorial-field-button", color="primary", className="mr-2"), width={"size": 4}),
+        dbc.Col(dbc.Button("Plot Vectorial Fields - vectorial sum", id="sum-and-plot-vectorial-field-button", color="primary", className="mr-2"), width={"size": 4}),
+        dbc.Col(dbc.Button("Plot Vectorial Field - selected mode", id="plot-selected-vectorial-field-button", color="primary", className="mr-2"), width={"size": 4})
+    ], className="mt-3"),
+
+
+    # Placeholder for vectorial field plots (E-field on the left and H-field on the right)
+    dbc.Row([
+        dbc.Col(dcc.Graph(id='vectorial-e-field-graph', style={'height': '700px', 'width': '700px', 'padding-right': '200px'}), width=6),
+        dbc.Col(dcc.Graph(id='vectorial-h-field-graph', style={'height': '700px', 'width': '700px', 'padding-left': '200px'}), width=6),
+    ], className="mt-4"),
 
 ])
 
@@ -365,7 +412,9 @@ def load_crystal(contents, previous_message):
     print("loaded")
     return new_message, geometry_configuration_elements_list, material_configuration_elements_list, solver_configuration_elements_list
 
-#function to be called when the plot epsilon button is clicked
+
+
+# function to be called when the plot epsilon button is clicked
 def plot_epsilon(epsilon_fig):
     global crystal_active, configuration_active
 
@@ -445,11 +494,13 @@ def show_dielectric(n_clicks, epsilon_fig, previous_message):
     epsilon_fig, msg = plot_epsilon(epsilon_fig)
     return epsilon_fig, previous_message + "\n" + msg
 
-# Callback to run the simulation when the button is clicked. It will plot epsilon and bands
+# Callback to run the simulation when the button is clicked. It will plot epsilon and bands 
+# and it will group the modes by k-point
 @app.callback(
     [Output('epsilon-graph', 'figure', allow_duplicate=True),
      Output('bands-graph', 'figure', allow_duplicate=True),
-     Output('message-box', 'value', allow_duplicate=True)],
+     Output('message-box', 'value', allow_duplicate=True),
+     Output('polarization-group-dropdown', 'options')],
     Input('run-simulation-button', 'n_clicks'),
     State('epsilon-graph', 'figure'),
     State('bands-graph', 'figure'),
@@ -457,12 +508,19 @@ def show_dielectric(n_clicks, epsilon_fig, previous_message):
     prevent_initial_call=True
 )
 def run_simulation_callback(n_clicks, epsilon_fig, bands_fig, previous_message):
-    global crystal_active
+    global crystal_active, active_modes_groups
 
     if n_clicks is None:
-        return dash.no_update, dash.no_update, previous_message + "\nRun Simulation button not clicked."
+        return dash.no_update, dash.no_update, previous_message + "\nRun Simulation button not clicked.", dash.no_update
+
     epsilon_fig, bands_fig, msg = run_simulation(crystal_active)
-    return epsilon_fig, bands_fig, previous_message + "\n" + msg + f"\nHas the simulation been run yet? {crystal_active.has_been_run}."
+    
+    # Group the modes by polarization
+    active_modes_groups = crystal_active.group_modes()
+
+    # Update polarization selector options
+    polarization_options = [{'label': polarization, 'value': polarization} for polarization in active_modes_groups.keys()]
+    return epsilon_fig, bands_fig, previous_message + "\n" + msg + f"\nHas the simulation been run yet? {crystal_active.has_been_run}.", polarization_options
 
 # Callback to update the field plots when the bands plot is clicked
 @app.callback(
@@ -542,6 +600,223 @@ def toggle_advanced_configuration(is_advanced):
         material_configuration_elements['E-chi3-offdiag-input'].hide()
 
     return material_configuration_elements_list
+
+# Callback to select the polarization and update the k-point dropdown menu
+@app.callback(
+    Output('k-point-group-dropdown', 'options'),
+    Input('polarization-group-dropdown', 'value'),
+    prevent_initial_call=True
+)
+def select_polarization_group(selected_polarization):
+    global active_modes_groups, crystal_active
+
+    if selected_polarization is None or crystal_active is None:
+        return []
+
+    # Extract the selected polarization group
+    polarization_group = active_modes_groups.get(selected_polarization)
+
+    if polarization_group is None:
+        return []
+
+    # Extract keys from the grouped modes
+    k_points = polarization_group.keys()
+
+    # Create options for the k-point dropdown
+    k_point_options = [{'label': f'({k_point[0]:0.2f}, {k_point[1]:0.2f}, {k_point[2]: .2f})',
+                         'value': str(k_point)} for k_point in k_points]
+
+    return k_point_options
+
+
+# Callback to select the k-point and update the frequency dropdown menu
+@app.callback(
+    Output('frequency-group-dropdown', 'options'),
+    [Input('polarization-group-dropdown', 'value'),
+     Input('k-point-group-dropdown', 'value')],
+    prevent_initial_call=True
+)
+def select_k_point_group(selected_polarization, selected_k_point):
+    global active_modes_groups, crystal_active
+
+    if selected_polarization is None or selected_k_point is None or crystal_active is None:
+        return []
+
+    # Convert the selected k-point string back to a tuple
+    kx, ky, kz = map(float, selected_k_point.strip('()').split(','))
+    k_point = (kx, ky, kz)
+
+    # Extract the selected polarization group
+    selected_group = active_modes_groups.get(selected_polarization).get(k_point)
+
+    
+    if selected_group is None:
+        return []
+
+    # Extract keys from the grouped modes
+    keys = selected_group.keys()
+
+    # Create options for the frequency dropdown
+    frequency_options = [{'label': key, 'value': key} for key in keys]
+
+    return frequency_options
+
+
+# Callback to select a frequency group and update the mode dropdown
+@app.callback(
+    Output('mode-selector-dropdown', 'options'),
+    [Input('polarization-group-dropdown', 'value'),
+     Input('k-point-group-dropdown', 'value'),
+     Input('frequency-group-dropdown', 'value')],
+    prevent_initial_call=True
+)
+def select_frequency_group(selected_polarization, selected_k_point, selected_frequency):
+    global active_modes_groups, crystal_active
+
+    if active_modes_groups is None or crystal_active is None:
+        return []
+    
+    if selected_polarization is None or selected_k_point is None or selected_frequency is None:
+        return []
+    
+    # Convert the selected k-point string back to a tuple
+    kx, ky, kz = map(float, selected_k_point.strip('()').split(','))
+    k_point = (kx, ky, kz)
+
+
+    # Extract the selected frequency group
+    selected_modes = active_modes_groups.get(selected_polarization).get(k_point).get(selected_frequency)
+
+    if selected_modes is None:
+        return []
+
+    # Create options for the mode dropdown
+    mode_options = [{'label': f"Mode {i + 1} with f: {selected_modes[i]['freq']:.6f} and p:{selected_modes[i]['polarization']}", 
+                     'value': i} for i in range(len(selected_modes))]
+
+    return mode_options
+
+
+# Callback to sum the vectorial fields of the selected frequency group and plot the result
+@app.callback(
+    [Output('vectorial-e-field-graph', 'figure', allow_duplicate=True),
+    Output('vectorial-h-field-graph', 'figure', allow_duplicate=True),
+    Output('message-box', 'value', allow_duplicate=True)],
+    Input('sum-and-plot-vectorial-field-button', 'n_clicks'),
+    [State('polarization-group-dropdown', 'value'),
+     State('k-point-group-dropdown', 'value'),
+     State('frequency-group-dropdown', 'value'),
+     State('message-box', 'value')],
+    prevent_initial_call=True
+)   
+def sum_and_plot_frequency_group(n_clicks, selected_polarization, selected_k_point, selected_frequency, previous_message):  
+    global active_modes_groups, crystal_active
+
+    if n_clicks is None:
+        return dash.no_update, dash.no_update, previous_message + "\nSum and Plot Vectorial Field button not clicked."
+
+    if active_modes_groups is None or crystal_active is None:
+        return dash.no_update, dash.no_update, previous_message + "\nNo active modes or crystal to plot vectorial field."
+
+    if selected_polarization is None or selected_k_point is None or selected_frequency is None:
+        return dash.no_update, dash.no_update, previous_message + "\nPlease select polarization, k-point, and frequency."
+
+    # Convert the selected k-point string back to a tuple
+    kx, ky, kz = map(float, selected_k_point.strip('()').split(','))
+    k_point = (kx, ky, kz)
+
+    # Extract the selected mode
+    selected_modes = active_modes_groups.get(selected_polarization).get(k_point).get(selected_frequency)
+
+    # Sum the vectorial fields of the selected modes
+    fig_e, fig_h= crystal_active.plot_modes_vectorial_fields_summed(selected_modes, sizemode="absolute")
+    fig_e.update_layout(width=700, height=700)
+    fig_h.update_layout(width=700, height=700)
+
+    new_message = previous_message + f"\nVectorial fields summed for frequency group (f: {selected_frequency}) at k-point ({kx:.3f}, {ky:.3f}, {kz:.3f}). Fields Summed"
+    return fig_e, fig_h, new_message
+
+
+# Callback to plot the vectorial fields of the selected frequency group without summing
+@app.callback(
+    [Output('vectorial-e-field-graph', 'figure', allow_duplicate=True),
+    Output('vectorial-h-field-graph', 'figure', allow_duplicate=True),
+    Output('message-box', 'value', allow_duplicate=True)],
+    Input('plot-vectorial-field-button', 'n_clicks'),
+    [State('polarization-group-dropdown', 'value'),
+     State('k-point-group-dropdown', 'value'),
+     State('frequency-group-dropdown', 'value'),
+     State('message-box', 'value')],
+    prevent_initial_call=True
+)
+
+def plot_frequency_group(n_clicks, selected_polarization, selected_k_point, selected_frequency, previous_message):
+    global active_modes_groups, crystal_active
+
+    if n_clicks is None:
+        return dash.no_update, dash.no_update, previous_message + "\nPlot Vectorial Field button not clicked."
+
+    if active_modes_groups is None or crystal_active is None:
+        return dash.no_update, dash.no_update, previous_message + "\nNo active modes or crystal to plot vectorial field."
+
+    if selected_polarization is None or selected_k_point is None or selected_frequency is None:
+        return dash.no_update, dash.no_update, previous_message + "\nPlease select polarization, k-point, and frequency."
+
+    # Convert the selected k-point string back to a tuple
+    kx, ky, kz = map(float, selected_k_point.strip('()').split(','))
+    k_point = (kx, ky, kz)
+
+    # Extract the selected mode
+    selected_modes = active_modes_groups.get(selected_polarization).get(k_point).get(selected_frequency)
+
+    # Plot the vectorial fields of the selected modes
+    fig_e, fig_h = crystal_active.plot_modes_vectorial_fields(selected_modes)
+    fig_e.update_layout(width=700, height=700)
+    fig_h.update_layout(width=700, height=700)
+
+    new_message = previous_message + f"\nVectorial fields plotted for frequency group (f: {selected_frequency}) at k-point ({kx:.3f}, {ky:.3f}, {kz:.3f})."
+    return fig_e, fig_h, new_message
+
+
+# Callback to plot the vectorial fields of the selected mode
+@app.callback(
+    [Output('vectorial-e-field-graph', 'figure', allow_duplicate=True),
+    Output('vectorial-h-field-graph', 'figure', allow_duplicate=True),
+    Output('message-box', 'value', allow_duplicate=True)],
+    Input('plot-selected-vectorial-field-button', 'n_clicks'),
+    [State('polarization-group-dropdown', 'value'),
+     State('k-point-group-dropdown', 'value'),
+     State('frequency-group-dropdown', 'value'),
+     State('mode-selector-dropdown', 'value'),
+     State('message-box', 'value')],
+    prevent_initial_call=True
+)
+def plot_selected_mode(n_clicks, selected_polarization, selected_k_point, selected_frequency, selected_mode, previous_message):
+    global active_modes_groups, crystal_active
+
+    if n_clicks is None:
+        return dash.no_update, dash.no_update, previous_message + "\nPlot Selected Vectorial Field button not clicked."
+
+    if active_modes_groups is None or crystal_active is None:
+        return dash.no_update, dash.no_update, previous_message + "\nNo active modes or crystal to plot vectorial field."
+
+    if selected_polarization is None or selected_k_point is None or selected_frequency is None or selected_mode is None:
+        return dash.no_update, dash.no_update, previous_message + "\nPlease select polarization, k-point, frequency, and mode."
+
+    # Convert the selected k-point string back to a tuple
+    kx, ky, kz = map(float, selected_k_point.strip('()').split(','))
+    k_point = (kx, ky, kz)
+
+    # Extract the selected mode
+    selected_modes = active_modes_groups.get(selected_polarization).get(k_point).get(selected_frequency)[selected_mode]
+
+    # Plot the vectorial fields of the selected mode
+    fig_e, fig_h = crystal_active.plot_modes_vectorial_fields([selected_modes])
+    fig_e.update_layout(width=700, height=700)
+    fig_h.update_layout(width=700, height=700)
+
+    new_message = previous_message + f"\nVectorial fields plotted for selected mode in frequency group (f: {selected_frequency}) at k-point ({kx:.3f}, {ky:.3f}, {kz:.3f}) ."
+    return fig_e, fig_h, new_message
 
 if __name__ == '__main__':
     #%%
