@@ -53,18 +53,17 @@ default_values = {
     'height_supercell': 4,
     'runner_1': 'run_te',
     'runner_2': 'run_tm',
-    'interpolation': 10,
+    'interpolation': 5,
     'num_bands': 6,
     'resolution_2d': 32,
     'resolution_3d': (32, 32, 16),
-    'epsilon_diag': (12, 12, 12),
+    'epsilon_diag': (4.569, 4.889, 4.889),
     'epsilon_offdiag': (0, 0, 0),
     'E_chi2_diag': (0, 0, 0),
-    'E_chi2_offdiag': (0, 0, 0),
     'E_chi3_diag': (0, 0, 0),
-    'E_chi3_offdiag': (0, 0, 0),
     'periods_for_epsilon_plot': 3,
     'periods_for_field_plot': 5,
+    'k_point_max': 0.01,
 }
 
 geometry_default_values = {
@@ -83,14 +82,14 @@ material_default_values = {
     'epsilon_diag': default_values['epsilon_diag'],
     'epsilon_offdiag': default_values['epsilon_offdiag'],
     'E_chi2_diag': default_values.get('E_chi2_diag', ''),
-    'E_chi2_offdiag': default_values.get('E_chi2_offdiag', ''),
     'E_chi3_diag': default_values.get('E_chi3_diag', ''),
-    'E_chi3_offdiag': default_values.get('E_chi3_offdiag', ''),
+    
 }
 
 solver_default_values = {
     'runner_1': default_values['runner_1'],
     'runner_2': default_values['runner_2'],
+    "k_point_max": default_values['k_point_max'],
     'interpolation': default_values['interpolation'],
     'num_bands': default_values['num_bands'],
     'resolution_2d': default_values['resolution_2d'],  # Assuming 2D resolution as default
@@ -262,15 +261,8 @@ E_chi2_diag_input.element = dbc.Row(
     id=E_chi2_diag_input.container_id
 )
 
-E_chi2_offdiag_input = UI_element('E-chi2-offdiag-input', parameter_id='E_chi2_offdiag')
-E_chi2_offdiag_input.element = dbc.Row(
-    [
-        dbc.Col(html.Label("E (Chi2 Off-Diagonal)"), width=4),
-        dbc.Col(dcc.Input(id=E_chi2_offdiag_input.id, type='text', value=str(default_values.get('E_chi2_offdiag', '')), placeholder='Enter E chi2 off-diagonal as (xy, yz, zx)'), width=8),
-    ],
-    style={'padding': '10px', "display": "flex"},
-    id=E_chi2_offdiag_input.container_id
-)
+
+
 
 E_chi3_diag_input = UI_element('E-chi3-diag-input', parameter_id='E_chi3_diag')
 E_chi3_diag_input.element = dbc.Row(
@@ -282,15 +274,7 @@ E_chi3_diag_input.element = dbc.Row(
     id=E_chi3_diag_input.container_id
 )
 
-E_chi3_offdiag_input = UI_element('E-chi3-offdiag-input', parameter_id='E_chi3_offdiag')
-E_chi3_offdiag_input.element = dbc.Row(
-    [
-        dbc.Col(html.Label("E (Chi3 Off-Diagonal)"), width=4),
-        dbc.Col(dcc.Input(id=E_chi3_offdiag_input.id, type='text', value=str(default_values.get('E_chi3_offdiag', '')), placeholder='Enter E chi3 off-diagonal as (xy, yz, zx)'), width=8),
-    ],
-    style={'padding': '10px', "display": "flex"},
-    id=E_chi3_offdiag_input.container_id
-)
+
 
 
 material_configuration_elements = {
@@ -300,17 +284,16 @@ material_configuration_elements = {
     epsilon_diag_input.id: epsilon_diag_input,
     epsilon_offdiag_input.id: epsilon_offdiag_input,
     E_chi2_diag_input.id: E_chi2_diag_input,
-    E_chi2_offdiag_input.id: E_chi2_offdiag_input,
     E_chi3_diag_input.id: E_chi3_diag_input,
-    E_chi3_offdiag_input.id: E_chi3_offdiag_input,
+    
 }
 
 epsilon_offdiag_input.hide()
 epsilon_diag_input.hide()   
 E_chi2_diag_input.hide()
-E_chi2_offdiag_input.hide()
+
 E_chi3_diag_input.hide()
-E_chi3_offdiag_input.hide()
+
 
 
 
@@ -358,6 +341,19 @@ runner_2_selector_dropdown.element = dbc.Row(
     style={'padding': '10px', "display": "flex"},
     id=runner_2_selector_dropdown.container_id
 )
+
+k_point_max_input = UI_element('k-point-max-input', parameter_id='k_point_max')
+k_point_max_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("K-Point Max"), width=4),
+        dbc.Col(dcc.Input(id=k_point_max_input.id, type='number', value=default_values['k_point_max'], step=0.001), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=k_point_max_input.container_id
+)
+
+
+
 
 interpolation_input = UI_element('interpolation-input', parameter_id='interpolation')
 interpolation_input.element = dbc.Row(
@@ -435,6 +431,7 @@ solver_configuration_elements = {
     periods_for_field_plot_input.id: periods_for_field_plot_input,
     resolution_2d_input.id: resolution_2d_input,
     resolution_3d_input.id: resolution_3d_input,
+    k_point_max_input.id: k_point_max_input,
 }
 
 solver_configuration_elements_list = dict_to_elements_list(solver_configuration_elements)

@@ -187,6 +187,17 @@ app.layout = dbc.Container([
         dbc.Col(dcc.Graph(id='vectorial-h-field-graph', style={'height': '700px', 'width': '700px', 'padding-left': '200px'}), width=6),
     ], className="mt-4"),
 
+    #Placeholder for the plot of the effective parameters
+    dbc.Row([
+        dbc.Col(dcc.Graph(id='effective-param-plot', style={'height': '700px', 'width': '700px', 'padding-right': '200px'}), width=12),
+    ], className="mt-4"),
+
+    #button to plot the effective parameters
+    dbc.Row([
+        dbc.Col(dbc.Button("Plot Effective Parameters", id="plot-effective-param-button", color="primary", className="mr-2"), width={"size": 4}),
+    ], className="mt-3"),
+    
+
 ])
 
 # callback to update the configurator-box content when a different photonic crystal type is selected
@@ -238,11 +249,8 @@ def update_configurator(crystal_type):
      State('epsilon-background-input', 'value'),
      State('epsilon-diag-input', 'value'),
      State('epsilon-offdiag-input', 'value'),
-     State('E-chi2-diag-input', 'value'),
-     State('E-chi2-offdiag-input', 'value'),
+     State('E-chi2-diag-input', 'value'), 
      State('E-chi3-diag-input', 'value'),
-     State('E-chi3-offdiag-input', 'value'),
-
      State('runner-selector-dropdown', 'value'),
      State('runner-2-selector-dropdown', 'value'),
      State('interpolation-input', 'value'),
@@ -250,18 +258,29 @@ def update_configurator(crystal_type):
      State('resolution-3d-input', 'value'),
      State('periods-for-epsilon-plot-input', 'value'),
      State('periods-for-field-plot-input', 'value'),
-     State('num-bands-input', 'value')
+     State('num-bands-input', 'value'),
+     State('k-point-max-input', 'value')
      ],
     prevent_initial_call=True
 )
-def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice_type, radius, height_slab, height_supercell, advanced_material, epsilon_bulk, epsilon_atom, epsilon_background, epsilon_diag, epsilon_offdiag, E_chi2_diag, E_chi2_offdiag, E_chi3_diag, E_chi3_offdiag, runner_1, runner_2, interpolation, resolution_2d, resolution_3d, periods_for_epsilon_plot, periods_for_field_plot, num_bands):
+def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice_type, radius, height_slab, height_supercell, advanced_material, epsilon_bulk, epsilon_atom, epsilon_background, epsilon_diag, epsilon_offdiag, E_chi2_diag, E_chi3_diag, runner_1, runner_2, interpolation, resolution_2d, resolution_3d, periods_for_epsilon_plot, periods_for_field_plot, num_bands, k_point_max):
     if n_clicks is None:
         return previous_message
 
     global crystal_active, configuration_active
     
     if crystal_type == '2d':
-        geometry = Crystal2D.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk)
+        if advanced_material:
+            geometry = Crystal2D.advanced_material_geometry(
+                radius_1=radius,
+                epsilon_diag=string_to_vector3(epsilon_diag),
+                epsilon_offdiag=string_to_vector3(epsilon_offdiag),
+                chi2_diag=string_to_vector3(E_chi2_diag),
+                chi3_diag=string_to_vector3(E_chi3_diag),
+                eps_atom_1=epsilon_atom,       
+            )
+        else:
+            geometry = Crystal2D.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk)
         crystal_active = Crystal2D(
             lattice_type=lattice_type,
             num_bands=num_bands,  # Updated to use the provided num_bands
@@ -269,17 +288,31 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
             interp=interpolation,
             periods=periods_for_epsilon_plot,
             pickle_id=crystal_id,
-            geometry=geometry
+            geometry=geometry,
+            k_point_max=k_point_max
         )
     elif crystal_type == 'slab':
-        geometry = CrystalSlab.basic_geometry(
-            radius_1=radius,
-            eps_atom_1=epsilon_atom,
-            eps_bulk=epsilon_bulk,
-            eps_background=epsilon_background,
-            height_slab=height_slab,
-            height_supercell=height_supercell
-        )
+        if advanced_material:
+            geometry = CrystalSlab.advanced_material_geometry(
+                radius_1=radius,
+                epsilon_diag=string_to_vector3(epsilon_diag),
+                epsilon_offdiag=string_to_vector3(epsilon_offdiag),
+                chi2_diag=string_to_vector3(E_chi2_diag),
+                chi3_diag=string_to_vector3(E_chi3_diag),
+                eps_atom_1=epsilon_atom,
+                eps_background=epsilon_background,
+                height_slab=height_slab,
+                height_supercell=height_supercell
+            )
+        else:
+            geometry = CrystalSlab.basic_geometry(
+                radius_1=radius,
+                eps_atom_1=epsilon_atom,
+                eps_bulk=epsilon_bulk,
+                eps_background=epsilon_background,
+                height_slab=height_slab,
+                height_supercell=height_supercell
+            )
         crystal_active = CrystalSlab(
             lattice_type=lattice_type,
             num_bands=num_bands,  # Updated to use the provided num_bands
@@ -287,7 +320,9 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
             interp=interpolation,
             periods=periods_for_epsilon_plot,
             pickle_id=crystal_id,
-            geometry=geometry
+            geometry=geometry,
+            k_point_max=k_point_max,
+
         )
     else:
         return previous_message + "\nInvalid crystal type selected."
@@ -306,9 +341,7 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
         'epsilon_diag': epsilon_diag,
         'epsilon_offdiag': epsilon_offdiag,
         'E_chi2_diag': E_chi2_diag,
-        'E_chi2_offdiag': E_chi2_offdiag,
         'E_chi3_diag': E_chi3_diag,
-        'E_chi3_offdiag': E_chi3_offdiag,
         'runner_1': runner_1,
         'runner_2': runner_2,
         'interpolation': interpolation,
@@ -317,6 +350,7 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
         'resolution_3d': resolution_3d,
         'periods_for_epsilon_plot': periods_for_epsilon_plot,
         'periods_for_field_plot': periods_for_field_plot,
+        'k_point_max': k_point_max,
     }
 
     new_message = f"""
@@ -587,17 +621,13 @@ def toggle_advanced_configuration(is_advanced):
         material_configuration_elements['epsilon-offdiag-input'].show()
         material_configuration_elements['epsilon-bulk-input'].hide()  
         material_configuration_elements['E-chi2-diag-input'].show()
-        material_configuration_elements['E-chi2-offdiag-input'].show()
         material_configuration_elements['E-chi3-diag-input'].show()
-        material_configuration_elements['E-chi3-offdiag-input'].show()
     else:
         material_configuration_elements['epsilon-diag-input'].hide()
         material_configuration_elements['epsilon-offdiag-input'].hide()
         material_configuration_elements['epsilon-bulk-input'].show()
         material_configuration_elements['E-chi2-diag-input'].hide()
-        material_configuration_elements['E-chi2-offdiag-input'].hide()
         material_configuration_elements['E-chi3-diag-input'].hide()
-        material_configuration_elements['E-chi3-offdiag-input'].hide()
 
     return material_configuration_elements_list
 
@@ -817,6 +847,47 @@ def plot_selected_mode(n_clicks, selected_polarization, selected_k_point, select
 
     new_message = previous_message + f"\nVectorial fields plotted for selected mode in frequency group (f: {selected_frequency}) at k-point ({kx:.3f}, {ky:.3f}, {kz:.3f}) ."
     return fig_e, fig_h, new_message
+
+
+# Callback to plot the effective parameters from the selected frequency group
+@app.callback(
+    [Output('effective-param-plot', 'figure', allow_duplicate=True),
+     Output('message-box', 'value', allow_duplicate=True)],
+    Input('plot-effective-param-button', 'n_clicks'),
+    [State('polarization-group-dropdown', 'value'),
+     State('k-point-group-dropdown', 'value'),
+     State('frequency-group-dropdown', 'value'),
+     State('message-box', 'value')],
+    prevent_initial_call=True
+)
+def plot_effective_parameters(n_clicks, selected_polarization, selected_k_point, selected_frequency, previous_message):
+    global active_modes_groups, crystal_active
+
+    if n_clicks is None:
+        return dash.no_update, previous_message + "\nPlot Effective Parameters button not clicked."
+
+    if active_modes_groups is None or crystal_active is None:
+        return dash.no_update, previous_message + "\nNo active modes or crystal to plot effective parameters."
+
+    if selected_polarization is None or selected_k_point is None or selected_frequency is None:
+        return dash.no_update, previous_message + "\nPlease select polarization, k-point, and frequency."
+
+    # Convert the selected k-point string back to a tuple
+    kx, ky, kz = map(float, selected_k_point.strip('()').split(','))
+    k_point = (kx, ky, kz)
+
+    # Extract the selected mode
+    selected_modes = active_modes_groups.get(selected_polarization).get(k_point).get(selected_frequency)
+
+    # Plot the effective parameters of the selected modes
+    eff = crystal_active.calculate_effective_parameters(selected_modes)
+    print(eff)
+    fig = crystal_active.plot_effective_parameters(eff)
+    fig.update_layout(width=700, height=700)
+
+    new_message = previous_message + f"\nEffective parameters plotted for frequency group (f: {selected_frequency}) at k-point ({kx:.3f}, {ky:.3f}, {kz:.3f})."
+    return fig, new_message
+
 
 if __name__ == '__main__':
     #%%

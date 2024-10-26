@@ -22,7 +22,8 @@ class PhotonicCrystal:
                 interp: int = 4,
                 periods: int = 3, 
                 pickle_id = None, 
-                k_points = None, 
+                k_points = None,
+                use_XY  = True
                 ):
         
         self.lattice_type = lattice_type
@@ -53,6 +54,7 @@ class PhotonicCrystal:
         self.gaps = {}
         self.epsilon = None
         self.modes= []
+        self.use_XY = use_XY
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -121,6 +123,8 @@ class PhotonicCrystal:
                 "polarization": polarization
             }
             self.modes.append(mode)
+
+
     
 
     
@@ -232,23 +236,42 @@ class PhotonicCrystal:
         ))
 
         # Customize the x-axis with the high symmetry points
-        k_high_sym = self.get_high_symmetry_points()
-        fig.update_layout(
-            title=title,
-            xaxis=dict(
-                tickmode='array',
-                tickvals=[i * (len(freqs) - 4) / 3 + i for i in range(4)],
-                ticktext=list(k_high_sym.keys()) + [list(k_high_sym.keys())[0]]  # Repeat the first element at the end
-            ),
-            yaxis_title='frequency (c/a)',
-            showlegend=True,
-            dragmode='select',  # Enables rectangular selection
-            clickmode='event+select',  # Enable click events and selection events
-            legend=dict(  # This ensures that clicking the legend will toggle visibility
-                itemclick="toggle",  # Toggle visibility when clicked
-                itemdoubleclick="toggleothers"  # Double-click to hide/show other entries
+        if self.use_XY is True:
+            relevant_k_points = self.get_XY_k_points_near_gamma()
+            fig.update_layout(
+                title=title,
+                xaxis=dict(
+                    tickmode='array',
+                    tickvals=[i * (len(freqs) - 3) / 2 + i for i in range(3)],
+                    ticktext=list(relevant_k_points.keys())  # Only three values, no repetition
+                ),
+                yaxis_title='frequency (c/a)',
+                showlegend=True,
+                dragmode='select',  # Enables rectangular selection
+                clickmode='event+select',  # Enable click events and selection events
+                legend=dict(  # This ensures that clicking the legend will toggle visibility
+                    itemclick="toggle",  # Toggle visibility when clicked
+                    itemdoubleclick="toggleothers"  # Double-click to hide/show other entries
+                )
             )
-        )
+        else:
+            relevant_k_points = self.get_high_symmetry_points()
+            fig.update_layout(
+                title=title,
+                xaxis=dict(
+                    tickmode='array',
+                    tickvals=[i * (len(freqs) - 4) / 3 + i for i in range(4)],
+                    ticktext=list(relevant_k_points.keys()) + [list(relevant_k_points.keys())[0]]  # Repeat the first element at the end
+                ),
+                yaxis_title='frequency (c/a)',
+                showlegend=True,
+                dragmode='select',  # Enables rectangular selection
+                clickmode='event+select',  # Enable click events and selection events
+                legend=dict(  # This ensures that clicking the legend will toggle visibility
+                    itemclick="toggle",  # Toggle visibility when clicked
+                    itemdoubleclick="toggleothers"  # Double-click to hide/show other entries
+                )
+            )
 
         # Add a JavaScript callback to handle select events
         fig.update_layout(
@@ -256,6 +279,17 @@ class PhotonicCrystal:
         )
 
         return fig
+    
+
+    def get_XY_k_points_near_gamma(self, distance = 0.1): 
+        if distance >= 0.5:
+            raise ValueError("Distance must be less than 0.5")
+        relevant_k_points = {
+            'X': mp.Vector3(0.5, 0),
+            'Γ': mp.Vector3(0, 0, 0),
+            'Y': mp.Vector3(0,0.5, 0)
+        }
+        return relevant_k_points
 
     def get_high_symmetry_points(self):
         k_high_sym = {}
@@ -396,9 +430,6 @@ class PhotonicCrystal:
         )
 
         return e_fig, h_fig
-    
-        
-
     
 
     def plot_mode_fields_norm_to_k(self, mode, k):
@@ -545,30 +576,6 @@ class PhotonicCrystal:
         return fields_norm_to_k
     
 
-    @staticmethod
-    def _maximum_fields_norm(fields_list):
-        """
-        Calculate the maximum norm of the fields to set the colorscale limits.
-
-        Args:
-            fields_list (list): A list of numpy arrays, each representing a field of shape (Nx, Ny, Nz, 3).
-
-        Returns:
-            tuple: A tuple containing the minimum and maximum norms of the fields.
-        """
-        max_norm = 0
-
-        # Loop over each field in the fields_list
-        for field in fields_list:
-            # Compute the norm (magnitude) for each point in space: sqrt(Ex^2 + Ey^2 + Ez^2)
-            norm = np.sqrt(np.sum(np.real(field)**2, axis=-1))  # axis=-1 because we sum over the 3 components (Ex, Ey, Ez)
-
-            # Find the maximum value of the norm
-            max_norm = max(max_norm, np.max(norm))
-        
-
-        return (0, float(max_norm))
-
     
     @staticmethod
     def _group_modes_by_polarization(modes):
@@ -628,7 +635,8 @@ class PhotonicCrystal:
         Groups modes within a given mode group by similar frequencies.
     
         Args:
-            mode_group (list): A dlist representing a group of modes. Each mode with a key "freq".                              which is for a list where each mode is a dictionary with a "freq" key.
+            mode_group (list): A dlist representing a group of modes. Each mode with a key "freq".                              
+            which is for a list where each mode is a dictionary with a "freq" key.
             frequency_tolerance (float): The tolerance for frequency similarity. 
                         Modes within this range are considered similar.
         
@@ -688,6 +696,86 @@ class PhotonicCrystal:
                 for freq, modes_p_k_f in frequency_groups.items():
                     groups[polarization][k_point][freq] = modes_p_k_f
         return groups
+    
+    
+    @staticmethod
+    def _calculate_impedence( e_field, h_field, dir = 'x'):
+        if dir=='x':
+            e_field_z = np.real(e_field[:,0,:, 2])
+            h_field_x = np.real(h_field[:,0,:, 0])
+            e_field_z_avg = np.mean(e_field_z)
+            h_field_x_avg = np.mean(h_field_x)
+            Zeff = e_field_z_avg / h_field_x_avg
+
+        if dir=='y':
+            e_field_x = np.real(e_field[:,0,:, 0])
+            h_field_z = np.real(h_field[:,0,:, 2])
+            e_field_x_avg = np.mean(e_field_x)
+            h_field_z_avg = np.mean(h_field_z)
+            Zeff = e_field_x_avg / h_field_z_avg
+        return Zeff
+    
+    @staticmethod
+    def _calculate_effective_parameter(mode, effective_parameters):
+        c = 3e8
+        epsilon0 = 8.854e-12
+        mu0 = 4 * math.pi * 1e-7
+
+        k = np.array( mode["k_point"] )
+        
+        if float(k[0]) == 0.0:
+            Zeff = PhotonicCrystal._calculate_impedence(mode["e_field"], mode["h_field"], dir = 'y')
+            eps_x = - k[1]/Zeff/epsilon0/c/mode["freq"]
+            mu_y = - k[1]*Zeff/mu0/c/mode["freq"]
+            effective_parameters["eps_x"].append(eps_x)
+            effective_parameters["mu_y"].append(mu_y)
+        elif float(k[1]) == 0.0:
+            Zeff = PhotonicCrystal._calculate_impedence(mode["e_field"], mode["h_field"], dir = 'x')
+            eps_y = - k[1]/Zeff/epsilon0/c/mode["freq"]
+            mu_x = - k[1]*Zeff/mu0/c/mode["freq"]
+            effective_parameters["eps_y"].append(eps_y)
+            effective_parameters["mu_x"].append(mu_x)
+        effective_parameters["freq"].append(mode["freq"])
+
+
+    def calculate_effective_parameters(self, modes, dir="y"):
+        effective_parameters = {
+            "eps_x": [],
+            "eps_y": [],
+            "mu_x": [],
+            "mu_y": [],
+            "freq": []
+        }
+        for mode in modes:
+            self._calculate_effective_parameter(mode, effective_parameters)
+        return effective_parameters
+
+    #plot effective parameters
+    def plot_effective_parameters(self, effective_parameters, title="Effective Parameters", fig=None):  
+        if fig is None:
+            fig = go.Figure()
+        fig.add_trace(go.Scatter(x=effective_parameters["eps_x"], y=effective_parameters["freq"], mode='lines', name='Epsilon X')) 
+        fig.add_trace(go.Scatter(x=effective_parameters["eps_y"], y=effective_parameters["freq"], mode='lines', name='Epsilon Y'))
+        fig.add_trace(go.Scatter(x=effective_parameters["mu_x"], y=effective_parameters["freq"], mode='lines', name='Mu X')) 
+        fig.add_trace(go.Scatter(x=effective_parameters["mu_y"], y=effective_parameters["freq"], mode='lines', name='Mu Y'))
+        return fig
+    
+
+        
+
+            
+
+        
+
+
+  
+    
+
+
+        
+    
+
+    
 
 
 @contextlib.contextmanager
@@ -712,11 +800,19 @@ class Crystal2D(PhotonicCrystal):
                 interp: int =4,
                 periods: int =3, 
                 pickle_id = None,
-                geometry = None):
-        super().__init__(lattice_type, num_bands, resolution, interp, periods, pickle_id)
+                geometry = None,
+                use_XY = True,
+                k_point_max = 0.01):
+        super().__init__(lattice_type, num_bands, resolution, interp, periods, pickle_id, use_XY=use_XY)
         
         
         self.geometry_lattice, self.k_points = self.basic_lattice(lattice_type)
+        if use_XY is True:
+            self.k_points = [
+                mp.Vector3(k_point_max, 0, 0),      # X
+                mp.Vector3(0, 0 ,0 ),       # Gamma
+                mp.Vector3(0, k_point_max,0)        # Y
+            ]
         self.geometry = geometry if geometry is not None else self.basic_geometry()
         self.k_points_interpolated = mp.interpolate(interp, self.k_points)
         
@@ -885,13 +981,6 @@ class Crystal2D(PhotonicCrystal):
             hovermode="closest",
             width=800, height=800
         )
-        self.find_modes_symmetries()
-        for mode in self.modes:
-            print(mode["symmetries"])
-        
-
-
-
         
 
         # Display the plot
@@ -923,6 +1012,36 @@ class Crystal2D(PhotonicCrystal):
         return geometry
     
     @staticmethod
+    def advanced_material_geometry(
+        radius_1 = 0.2,
+        epsilon_diag = mp.Vector3(12, 12, 12),
+        epsilon_offdiag = mp.Vector3(0, 0, 0),
+        chi2_diag = mp.Vector3(0,0,0),
+        
+        chi3_diag = mp.Vector3(0,0,0),
+        
+        eps_atom_1 = 1
+    ):
+        
+        geometry =[
+            mp.Block(
+                size = mp.Vector3(mp.inf, mp.inf),
+                material = mp.Medium(
+                    epsilon_diag=epsilon_diag,
+                    epsilon_offdiag = epsilon_offdiag, 
+                    E_chi2_diag = chi2_diag, 
+                    E_chi3_diag = chi3_diag,
+                )
+            )
+        ]
+
+        geometry.append(mp.Cylinder(radius_1, 
+                                        material=mp.Medium(epsilon=eps_atom_1),
+                                        center = mp.Vector3(0,0)))
+        return geometry
+    
+
+    @staticmethod
     def basic_lattice(lattice_type='square'):
         if lattice_type == 'square':
             return Crystal2D.square_lattice()
@@ -950,6 +1069,7 @@ class Crystal2D(PhotonicCrystal):
             mp.Vector3(),               # Gamma
         ]
         return lattice, k_points
+    
 
     @staticmethod
     def triangular_lattice():
@@ -984,11 +1104,19 @@ class CrystalSlab(PhotonicCrystal):
                 interp: int =2,
                 periods: int =3, 
                 pickle_id = None,
-                geometry = None):
-        super().__init__(lattice_type, num_bands, resolution, interp, periods, pickle_id)
+                geometry = None, 
+                use_XY = True,
+                k_point_max = 0.01):
+        super().__init__(lattice_type, num_bands, resolution, interp, periods, pickle_id, use_XY=True)
         
         
         self.geometry_lattice, self.k_points = self.basic_lattice(lattice_type)
+        if use_XY is True: 
+            self.k_points = [
+                mp.Vector3(k_point_max, 0, 0),      # X
+                mp.Vector3(0, 0 ,0 ),               # Gamma
+                mp.Vector3(0, k_point_max, 0)       # Y
+            ]
         self.geometry = geometry if geometry is not None else self.basic_geometry()
         self.k_points_interpolated = mp.interpolate(interp, self.k_points)
 
@@ -998,7 +1126,8 @@ class CrystalSlab(PhotonicCrystal):
                                  opacity=0.3, 
                                  colorscale='PuBuGn', 
                                  override_resolution_with: None|int= None, 
-                                 periods = 1):
+                                 periods = 1,
+                                 ):
         """
         Plot the epsilon values obtained from the simulation interactively using Plotly.
         """
@@ -1164,6 +1293,55 @@ class CrystalSlab(PhotonicCrystal):
                                         height=height_slab))
         
         return geometry
+    
+
+    def advanced_material_geometry(
+        radius_1 = 0.2,
+        epsilon_diag = mp.Vector3(12, 12, 12),
+        epsilon_offdiag =  mp.Vector3(0, 0, 0),
+        chi2_diag =  mp.Vector3(0,0,0),  
+        chi3_diag =  mp.Vector3(0,0,0),
+        eps_atom_1 = 1, 
+        eps_background  = 1, 
+        eps_substrate = 1,
+        height_supercell = 4, 
+        height_slab = 0.5
+    ):
+        
+        geometry = []
+        
+        #background
+        geometry.append(
+            mp.Block(
+                size = mp.Vector3(mp.inf, mp.inf, height_supercell),
+                material=mp.Medium(epsilon=eps_background)),
+            
+        )
+        
+        #substrate
+        if eps_substrate is not None:
+            geometry.append(mp.Block(
+                size = mp.Vector3(mp.inf, mp.inf, height_supercell*0.5),
+                center = mp.Vector3(0, 0, -height_supercell*0.25),
+                material=mp.Medium(epsilon=eps_substrate)))
+            
+        #slab
+        geometry.append(
+            mp.Block(
+                size = mp.Vector3(mp.inf, mp.inf, height_slab),
+                material=mp.Medium(epsilon_diag=epsilon_diag, 
+                                   epsilon_offdiag = epsilon_offdiag,
+                                   E_chi2_diag = chi2_diag,
+                                   E_chi3_diag = chi3_diag,)
+                                ),
+        )
+
+        #atom 1
+        geometry.append(mp.Cylinder(radius_1, 
+                                        material=mp.Medium(epsilon=eps_atom_1),
+                                        height=height_slab))
+        return geometry
+
     
     
     def plot_field_interactive(self, 
