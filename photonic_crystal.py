@@ -124,16 +124,12 @@ class PhotonicCrystal:
             }
             self.modes.append(mode)
 
-
-    
-
-    
         print(self.k_points_interpolated)
         with suppress_output():
             getattr(self.ms, runner)(get_mode_data)
             self.freqs[polarization] = self.ms.all_freqs
             self.gaps[polarization] = self.ms.gap_list
-        print(self.modes[1])
+       
 
     def run_dumb_simulation(self):
         """
@@ -146,6 +142,8 @@ class PhotonicCrystal:
                                   num_bands=1)
         
         self.ms.run()
+        ms = self.ms
+        return ms
                 
     def extract_data(self, periods: int | None = 5):
         """
@@ -319,6 +317,33 @@ class PhotonicCrystal:
         raise NotImplementedError
     
 
+    def look_for_mode(self, polarization, k_point, freq, k_point_max_distance = None, freq_tolerance=0.01):
+        """
+        Look for a mode with the specified polarization, k-point, and frequency.
+
+        Args:
+            polarization (str): The polarization of the mode.
+            k_point (tuple): The k-point of the mode.
+            freq (float): The frequency of the mode.
+            freq_tolerance (float): The tolerance for frequency similarity.
+
+        Returns:
+            list: A list of mode dictionaries that match the criteria.
+        """
+
+        target_modes = []
+        if k_point_max_distance is None:
+            for mode in self.modes:
+                if mode["polarization"] == polarization and mode["k_point"] == k_point and abs(mode["freq"] - freq) <= freq_tolerance:
+                    target_modes.append(mode)
+        else:
+            for mode in self.modes:
+                if mode["polarization"] == polarization and np.linalg.norm(np.array(mode["k_point"]) - np.array(k_point)) <= k_point_max_distance and abs(mode["freq"] - freq) <= freq_tolerance:
+                    target_modes.append(mode)
+        return target_modes
+        
+    
+
     def find_modes_symmetries(self):
         if self.freqs is None:
             raise ValueError("Frequencies are not calculated. Run the simulation first.")
@@ -435,10 +460,43 @@ class PhotonicCrystal:
     def plot_mode_fields_norm_to_k(self, mode, k):
         fields = [mode["e_field"], mode["h_field"]]
         fields_norm_to_k = self._calculate_field_norm_to_k(fields, k)
-        names = [f"Electric Field (Perpendicular to k={k})", f"Magnetic Field (Perpendicular to k={k})"]
-        sizerefs = [1, 1]
-        fig = PhotonicCrystal._plot_field_vector(fields_norm_to_k, names, sizerefs)
-        return fig
+        fig_e = go.Figure()
+        fig_h = go.Figure()
+        
+
+        fig_e.add_trace(self._field_to_cones(fields_norm_to_k[0], colorscale="blues"))
+        fig_h.add_trace(self._field_to_cones(fields_norm_to_k[1], colorscale="reds"))
+        return fig_e, fig_h 
+    
+    def plot_vectorial_fields(self, fields, colorscales=["Viridis","Viridis"], names=["Field 1", "Field 2"]): 
+        fig_e = go.Figure()
+        fig_h = go.Figure()
+        fig_e.add_trace(self._field_to_cones(fields[0], colorscale=colorscales[0]))
+        fig_h.add_trace(self._field_to_cones(fields[1], colorscale=colorscales[1]))
+        fig_e.update_layout(
+            title=names[0],
+            scene=dict(
+            xaxis=dict(title='Y'),
+            yaxis=dict(title='X'),
+            zaxis=dict(title='Z')
+            ),
+            margin=dict(l=0, r=0, b=0, t=40),
+            showlegend=True
+        )
+
+        fig_h.update_layout(
+            title=names[1],
+            scene=dict(
+            xaxis=dict(title='Y'),
+            yaxis=dict(title='X'),
+            zaxis=dict(title='Z')
+            ),
+            margin=dict(l=0, r=0, b=0, t=40),
+            showlegend=True
+        )
+        return fig_e, fig_h
+
+        
     
 
     @staticmethod
@@ -541,7 +599,6 @@ class PhotonicCrystal:
             cone = PhotonicCrystal._field_to_cones(field, colorscale=colorscales[i], sizemode=sizemode, sizeref=sizeref, clim=clim)
             cones.append(cone)
         return cones
-
 
 
     @staticmethod
@@ -669,6 +726,9 @@ class PhotonicCrystal:
     
         return frequency_groups    
     
+
+    
+
     def group_modes(self):
         """
         Group modes first by k_point and then by frequency within each k_point group.
@@ -698,66 +758,146 @@ class PhotonicCrystal:
         return groups
     
     
-    @staticmethod
-    def _calculate_impedence( e_field, h_field, dir = 'x'):
-        if dir=='x':
-            e_field_z = np.real(e_field[:,0,:, 2])
-            h_field_x = np.real(h_field[:,0,:, 0])
-            e_field_z_avg = np.mean(e_field_z)
-            h_field_x_avg = np.mean(h_field_x)
-            Zeff = e_field_z_avg / h_field_x_avg
 
-        if dir=='y':
-            e_field_x = np.real(e_field[:,0,:, 0])
-            h_field_z = np.real(h_field[:,0,:, 2])
-            e_field_x_avg = np.mean(e_field_x)
-            h_field_z_avg = np.mean(h_field_z)
-            Zeff = e_field_x_avg / h_field_z_avg
-        return Zeff
-    
     @staticmethod
-    def _calculate_effective_parameter(mode, effective_parameters):
-        c = 3e8
-        epsilon0 = 8.854e-12
-        mu0 = 4 * math.pi * 1e-7
+    def _get_direction(k_vector):
+        """
+        Determine the primary direction of the wavevector k.
 
-        k = np.array( mode["k_point"] )
+        Args:
+        - k_vector: A numpy array or list of shape (3,), representing the wavevector [kx, ky, kz].
+
+        Returns:
+        - int: 0 for x-direction, 1 for y-direction, 2 for z-direction.
+        """
+        if k_vector[0] != 0 and k_vector[1] == 0 and k_vector[2] == 0:
+            return 0  # x-direction
+        elif k_vector[0] == 0 and k_vector[1] != 0 and k_vector[2] == 0:
+            return 1  # y-direction
+        elif k_vector[0] == 0 and k_vector[1] == 0 and k_vector[2] != 0:
+            return 2  # z-direction
+        else:
+            raise ValueError("The wavevector k does not align with a primary axis.")
         
-        if float(k[0]) == 0.0:
-            Zeff = PhotonicCrystal._calculate_impedence(mode["e_field"], mode["h_field"], dir = 'y')
-            eps_x = - k[1]/Zeff/epsilon0/c/mode["freq"]
-            mu_y = - k[1]*Zeff/mu0/c/mode["freq"]
-            effective_parameters["eps_x"].append(eps_x)
-            effective_parameters["mu_y"].append(mu_y)
-        elif float(k[1]) == 0.0:
-            Zeff = PhotonicCrystal._calculate_impedence(mode["e_field"], mode["h_field"], dir = 'x')
-            eps_y = - k[1]/Zeff/epsilon0/c/mode["freq"]
-            mu_x = - k[1]*Zeff/mu0/c/mode["freq"]
-            effective_parameters["eps_y"].append(eps_y)
-            effective_parameters["mu_x"].append(mu_x)
-        effective_parameters["freq"].append(mode["freq"])
 
+    
+        
+    @staticmethod
+    def _calculate_effective_parameter(mode):
+        e_field = mode["e_field"]
+        h_field = mode["h_field"]
+        k_vector_mpb = mode["k_point"]
+        f_mpb = mode["freq"]
+        epsilon_0 = 8.854187817e-12
+        mu_0 = 4 * math.pi * 1e-7
+        c0 = 299792458
+        try:
+            k_dir = PhotonicCrystal._get_direction(k_vector_mpb)
+        except ValueError as e:
+            print(f"Error: {e}")
+            return {
+                "eps_x": None,
+                "eps_y": None,
+                "eps_z": None,
+                "mu_x": None,
+                "mu_y": None,
+                "mu_z": None,
+                "freq": f_mpb
+            }
+        
+        if k_dir == 0:  # k along x
+            e_field_normal_to_k, h_field_normal_to_k = PhotonicCrystal._calculate_field_norm_to_k([e_field,h_field], k_vector_mpb)
+            
+            #Take components in the edge of the cell
+            Ey = e_field_normal_to_k[0,:,:,1].real  
+            Hz = h_field_normal_to_k[0,:,:,2].real
+            
 
-    def calculate_effective_parameters(self, modes, dir="y"):
-        effective_parameters = {
-            "eps_x": [],
-            "eps_y": [],
-            "mu_x": [],
-            "mu_y": [],
-            "freq": []
+            #Take components in the edge of the cell
+            Ez = e_field_normal_to_k[0,:,:,2].real
+            Hy = e_field_normal_to_k[0,:,:,1].real
+            
+
+            #Calculate effective impedance
+            Z_eff_x = None
+            Z_eff_y = (Ey / Hz).mean()
+            Z_eff_z = (Ez / Hy).mean()
+
+            #Calculate effective parameters
+            eps_eff_x = None
+            eps_eff_y = None
+            eps_eff_z = None
+            mu_eff_x  = None
+            mu_eff_y  = None 
+            mu_eff_z  = None
+
+        elif k_dir == 1: # k along y
+            e_field_normal_to_k, h_field_normal_to_k = PhotonicCrystal._calculate_field_norm_to_k([e_field,h_field], k_vector_mpb)
+            
+
+            #Take components in the edge of the cell
+            Ex = e_field_normal_to_k[:,0,:,0].real
+            Hz = h_field_normal_to_k[:,0,:,2].real
+            
+
+            #Take components in the edge of the cell
+            Ez = e_field_normal_to_k[:,0,:,2].real
+            Hx = e_field_normal_to_k[:,0,:,0].real
+            
+
+            Z_eff_x = (Ex / Hz).mean()
+            Z_eff_y = None
+            Z_eff_z = (Ez/ Hx).mean()
+
+            eps_eff_x = -k_vector_mpb[1]/Z_eff_x/epsilon_0/f_mpb/c0
+            eps_eff_y = None
+            eps_eff_z = k_vector_mpb[1]/Z_eff_z/epsilon_0/f_mpb/c0
+            mu_eff_x = -k_vector_mpb[1]*Z_eff_x/mu_0/f_mpb/c0
+            mu_eff_y = None
+            mu_eff_z =  k_vector_mpb[1]*Z_eff_z/mu_0/f_mpb/c0
+
+        results = {
+            "eps_eff_x": eps_eff_x,
+            "eps_eff_y": eps_eff_y,
+            "eps_eff_z": eps_eff_z,
+            "mu_eff_x": mu_eff_x,
+            "mu_eff_y": mu_eff_y,
+            "mu_eff_z": mu_eff_z,
+            "freq": f_mpb,
+            "Z_eff_x": Z_eff_x,
+            "Z_eff_y": Z_eff_y,
+            "Z_eff_z": Z_eff_z
         }
+        
+        return results
+
+
+    def calculate_effective_parameters(self, modes):
+        """
+        Calculate the effective parameters for each mode in the list.
+
+        Args:
+        - modes: A list of mode dictionaries, each containing "e_field", "h_field", "k_point", and "freq" keys.
+
+        Returns:
+        - list: A list of dictionaries, each containing the effective parameters for a mode.
+        """
+        effective_parameters = []
         for mode in modes:
-            self._calculate_effective_parameter(mode, effective_parameters)
+            effective_parameters.append(PhotonicCrystal._calculate_effective_parameter(mode))
         return effective_parameters
+
 
     #plot effective parameters
     def plot_effective_parameters(self, effective_parameters, title="Effective Parameters", fig=None):  
         if fig is None:
             fig = go.Figure()
-        fig.add_trace(go.Scatter(x=effective_parameters["eps_x"], y=effective_parameters["freq"], mode='lines', name='Epsilon X')) 
-        fig.add_trace(go.Scatter(x=effective_parameters["eps_y"], y=effective_parameters["freq"], mode='lines', name='Epsilon Y'))
-        fig.add_trace(go.Scatter(x=effective_parameters["mu_x"], y=effective_parameters["freq"], mode='lines', name='Mu X')) 
-        fig.add_trace(go.Scatter(x=effective_parameters["mu_y"], y=effective_parameters["freq"], mode='lines', name='Mu Y'))
+        fig.add_trace(go.Scatter(x=effective_parameters["eps_eff_x"], y=effective_parameters["freq"], mode='lines', name='Epsilon X')) 
+        fig.add_trace(go.Scatter(x=effective_parameters["eps_eff_y"], y=effective_parameters["freq"], mode='lines', name='Epsilon Y'))
+        fig.add_trace(go.Scatter(x=effective_parameters["eps_eff_z"], y=effective_parameters["freq"], mode='lines', name='Epsilon Z'))
+        fig.add_trace(go.Scatter(x=effective_parameters["mu_eff_x"], y=effective_parameters["freq"], mode='lines', name='Mu X')) 
+        fig.add_trace(go.Scatter(x=effective_parameters["mu_eff_y"], y=effective_parameters["freq"], mode='lines', name='Mu Y'))
+        fig.add_trace(go.Scatter(x=effective_parameters["mu_eff_z"], y=effective_parameters["freq"], mode='lines', name='Mu Z'))
         return fig
     
 
@@ -802,7 +942,7 @@ class Crystal2D(PhotonicCrystal):
                 pickle_id = None,
                 geometry = None,
                 use_XY = True,
-                k_point_max = 0.01):
+                k_point_max = 0.2):
         super().__init__(lattice_type, num_bands, resolution, interp, periods, pickle_id, use_XY=use_XY)
         
         
@@ -832,7 +972,7 @@ class Crystal2D(PhotonicCrystal):
             if fig is None:
                 fig = go.Figure()
 
-            fig.add_trace(go.Heatmap(z=converted_eps, colorscale='Viridis'))
+            fig.add_trace(go.Heatmap(z=converted_eps.T, colorscale='Viridis'))
             fig.update_layout(
                 title=dict(
                     text=f"{title}<br>Dielectric Distribution",
@@ -962,11 +1102,7 @@ class Crystal2D(PhotonicCrystal):
                 "field_type" : field_type,
             }
             
-
-            self.modes.append(mode) 
-
-
-               
+             
 
         # Add the dropdown menu to the layout
         fig.update_layout(
@@ -1009,6 +1145,23 @@ class Crystal2D(PhotonicCrystal):
             geometry.append(mp.Cylinder(radius_2, 
                                         material=mp.Medium(epsilon=eps_atom_2),
                                         center = mp.Vector3(.5,.5)))
+        return geometry
+    
+    @staticmethod
+    def ellipsoid_geometry(e1: float=0.2, 
+                           e2: float = 0.3,
+                           eps_atom = 1, 
+                           eps_bulk = 12):
+        geometry = [
+            mp.Block(
+                size = mp.Vector3(mp.inf, mp.inf),
+                material=mp.Medium(epsilon=eps_bulk)),
+            ]   
+        
+        size=mp.Vector3(e1,e2, mp.inf)
+        geometry.append(mp.Ellipsoid(size=size,
+                                     material=mp.Medium(epsilon=eps_atom),
+                                     center=mp.Vector3(0,0)))
         return geometry
     
     @staticmethod
@@ -1106,7 +1259,7 @@ class CrystalSlab(PhotonicCrystal):
                 pickle_id = None,
                 geometry = None, 
                 use_XY = True,
-                k_point_max = 0.01):
+                k_point_max = 0.2):
         super().__init__(lattice_type, num_bands, resolution, interp, periods, pickle_id, use_XY=True)
         
         
@@ -1150,7 +1303,9 @@ class CrystalSlab(PhotonicCrystal):
 
         z_points = converted_eps.shape[2]//periods
         z_mid = converted_eps.shape[2]//2
-        epsilon = converted_eps[..., z_mid-z_points//2:z_mid+z_points//2-1]  
+        epsilon = converted_eps[..., z_mid-z_points//2:z_mid+z_points//2-1] 
+        print(epsilon.shape)
+        epsilon = np.transpose(epsilon,(1,0,2)) 
 
         # Create indices for x, y, z axes (meshgrid)
         x, y, z = np.meshgrid(np.arange(epsilon.shape[0]),
@@ -1183,11 +1338,13 @@ class CrystalSlab(PhotonicCrystal):
         fig.update_layout(
             title='3D Volume Plot of Dielectric Function',
             scene=dict(
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
-                zaxis=dict(visible=False),
+            xaxis=dict(title='X', visible=True),
+            yaxis=dict(title='Y', visible=True),
+            zaxis=dict(title='Z', visible=True),
             )
         )
+        
+        fig.update_layout(height=800, width=600)
 
         return fig
 
@@ -1295,6 +1452,44 @@ class CrystalSlab(PhotonicCrystal):
         return geometry
     
 
+    def ellipsoid_geometry(e1: float=0.2,
+                           e2: float = 0.3,
+                           eps_atom = 1,
+                           height_supercell=4,
+                           height_slab=0.5,
+                           eps_background=1,
+                           eps_substrate=1,
+                           eps_diag = mp.Vector3(12, 12, 12),
+                           eps_offdiag = mp.Vector3(0, 0, 0),
+                           E_chi2_diag = mp.Vector3(0,0,0),
+                           E_chi3_diag = mp.Vector3(0,0,0),
+                           ):
+        geometry = [
+            #background
+            mp.Block(
+                size = mp.Vector3(mp.inf, mp.inf, height_supercell),
+                material=mp.Medium(epsilon=eps_background)),
+            #substrate
+            mp.Block(
+                size = mp.Vector3(mp.inf, mp.inf, height_supercell*0.5),
+                center = mp.Vector3(0, 0, -height_supercell*0.25),
+                material=mp.Medium(epsilon=eps_substrate)),
+            #slab
+            mp.Block(
+                size = mp.Vector3(mp.inf, mp.inf, height_slab),
+                material=mp.Medium(epsilon_diag=eps_diag,
+                                   epsilon_offdiag = eps_offdiag,
+                                   E_chi2_diag = E_chi2_diag,
+                                   E_chi3_diag = E_chi3_diag)),
+            #atom
+            mp.Ellipsoid(size=mp.Vector3(e1,e2, mp.inf),
+                         material=mp.Medium(epsilon=eps_atom),
+                         center=mp.Vector3(0,0,0))
+        ]
+        return geometry
+    
+    
+
     def advanced_material_geometry(
         radius_1 = 0.2,
         epsilon_diag = mp.Vector3(12, 12, 12),
@@ -1342,8 +1537,193 @@ class CrystalSlab(PhotonicCrystal):
                                         height=height_slab))
         return geometry
 
-    
-    
+                            
+        
+
+
+    def plot_field(self, 
+            target_polarization, 
+            target_k_point, 
+            target_frequency, 
+            frequency_tolerance, 
+            periods: int=1, 
+            component: int = 2, 
+            quantity: str = "real", 
+            colorscale: str = 'RdBu',                  
+            ):
+        """
+        Plot the field for a specific mode based on the given parameters.
+
+        Args:
+            target_polarization (str): The polarization of the target mode.
+            target_k_point (tuple): The k-point of the target mode.
+            target_frequency (float): The frequency of the target mode.
+            frequency_tolerance (float): The tolerance for frequency similarity.
+            periods (int): The number of periods to extract. Default is 1.
+            component (int): The component of the field to plot (0 for x, 1 for y, 2 for z). Default is 2.
+            quantity (str): The quantity to plot ('real', 'imag', or 'abs'). Default is 'real'.
+            colorscale (str): The colorscale to use for the plot. Default is 'RdBu'.
+
+        Returns:
+            tuple: A tuple containing the electric field figure and the magnetic field figure.
+        """
+        target_modes = self.look_for_mode(target_polarization, target_k_point, target_frequency, frequency_tolerance)
+        
+        
+        with suppress_output():
+            self.run_dumb_simulation()
+            md = mpb.MPBData(rectify=True, periods=periods, lattice=self.ms.get_lattice())
+            eps = md.convert(self.ms.get_epsilon()) 
+
+        z_points = eps.shape[2] // periods
+        z_mid = eps.shape[2] // 2
+        
+        # Now take only epsilon in the center of the slab
+        eps = eps[..., z_mid]
+        # Calculate the midpoint between min and max of the permittivity (eps)
+        min_eps, max_eps = np.min(eps), np.max(eps)
+        midpoint = (min_eps + max_eps) / 2  # The level to be plotted
+
+        fig_e = go.Figure()
+        fig_h = go.Figure()
+        dropdown_buttons_e = []
+        dropdown_buttons_h = []
+        
+        num_plots = len(target_modes)
+        
+        for i, mode in enumerate(target_modes):
+            # Initialize visibility status: False for all traces
+            visible_status_e = [False] * (2 * num_plots)  # Each mode adds two traces
+            visible_status_h = [False] * (2 * num_plots)
+
+            visible_status_e[2 * i] = True  # Set the contour plot visible
+            visible_status_h[2 * i] = True
+            visible_status_e[2 * i + 1] = True  # Set the heatmap visible
+            visible_status_h[2 * i + 1] = True  # Set the heatmap visible
+
+            k_point = mode["k_point"]
+            freq    = mode["freq"]
+            polarization = mode["polarization"]
+
+            # Take the specified component of the fields in the center of the slab
+            
+            e_field = mpb.MPBArray(mode["e_field"], lattice = self.ms.get_lattice(),  kpoint = mode["k_point"] )
+            h_field = mpb.MPBArray(mode["h_field"], lattice = self.ms.get_lattice(),  kpoint = mode["k_point"])
+            e_field = e_field[..., z_points // 2, component]
+            h_field = h_field[..., z_points // 2, component]
+            with suppress_output():
+                e_field = md.convert(e_field) 
+                h_field = md.convert(h_field)
+
+            if quantity == "real":
+                e_field = np.real(e_field)
+                h_field = np.real(h_field)
+            elif quantity == "imag":
+                e_field = np.imag(e_field)
+                h_field = np.imag(h_field)
+            elif quantity == "abs":
+                e_field = np.abs(e_field)
+                h_field = np.abs(h_field)
+            else:
+                raise ValueError("Invalid quantity. Choose 'real', 'imag', or 'abs'.")
+
+            # Add the contour plot for permittivity (eps) at the midpoint
+            contour_e = go.Contour(z=eps.T,
+                                contours=dict(
+                                    start=midpoint,  # Start and end at the midpoint to ensure a single level
+                                    end=midpoint,
+                                    size=0.1,  # A small size to keep it as a single contour
+                                    coloring='none'  # No filling
+                                ),
+                                line=dict(color='black', width=2),
+                                showscale=False,
+                                opacity=0.7,
+                                visible=True if i == num_plots-1 else False)  # Only the first mode is visible
+            contour_h = contour_e  # Same contour for H-field figure
+
+            # Add the contour trace
+            fig_e.add_trace(contour_e)
+            fig_h.add_trace(contour_h)
+
+            # Add the heatmap for the electric field
+            heatmap_e = go.Heatmap(z=e_field.T, colorscale=colorscale, zsmooth='best', opacity=0.9,
+                                    showscale=True, visible= True if i == num_plots-1 else False)
+            # Add the heatmap for the magnetic field
+            heatmap_h = go.Heatmap(z=h_field.T, colorscale=colorscale, zsmooth='best', opacity=0.9,
+                                    showscale=True, visible= True if i == num_plots-1 else False)
+
+            # Add the heatmap trace
+            fig_e.add_trace(heatmap_e)
+            fig_h.add_trace(heatmap_h)
+
+            
+
+            data_str = f"Mode {i + 1} <br> k = [{k_point[0]:0.2f}, {k_point[1]:0.2f}], freq={freq:0.3f}, polarization={polarization}"
+            if component == 0: 
+                component_str = "x-component"
+            elif component == 1:
+                component_str = "y-component"
+            else:
+                component_str = "z-component"
+            subtitle_e = f"E-field, {component_str}, {quantity}"
+            subtitle_h = f"H-field, {component_str}, {quantity}"
+            # Create a button for each field dataset for the dropdown
+            dropdown_buttons_e.append(dict(label=f'Mode {i + 1}',
+                                        method='update',
+                                        args=[{'visible': visible_status_e},  # Update visibility for both eps and field
+                                            {'title':f"{data_str}:<br> {subtitle_e}"}
+                                        ]))
+            dropdown_buttons_h.append(dict(label=f'Mode {i + 1}',
+                                        method='update',
+                                        args=[{'visible': visible_status_h},  # Update visibility for both eps and field
+                                            {'title':f"{data_str}:<br> {subtitle_h}"}
+                                        ]))
+
+        data_str = f"Mode {i + 1} <br> k = [{k_point[0]:0.2f}, {k_point[1]:0.2f}], freq={freq:0.3f}, polarization={polarization}"
+        fig_e.update_layout(
+            updatemenus=[dict(active=num_plots - 1,
+                            buttons=dropdown_buttons_e,
+                            x=1.15, y=1.15,
+                            xanchor='left', yanchor='top')],
+            title=f"{data_str}:<br> {subtitle_e}",
+            xaxis_showgrid=False, yaxis_showgrid=False,
+            xaxis_zeroline=False, yaxis_zeroline=False,
+            xaxis_visible=False, yaxis_visible=False,
+            hovermode="closest",
+            width=800, height=800,
+            xaxis_title="X",
+            yaxis_title="Y"
+            
+        )
+
+        fig_h.update_layout(
+            updatemenus=[dict(active=0,
+                            buttons=dropdown_buttons_h,
+                            x=1.15, y=1.15,
+                            xanchor='left', yanchor='top')],
+            title=f"{data_str}:<br> {subtitle_h}",
+            xaxis_showgrid=False, yaxis_showgrid=False,
+            xaxis_zeroline=False, yaxis_zeroline=False,
+            xaxis_visible=False, yaxis_visible=False,
+            hovermode="closest",
+            width=800, height=800,
+            xaxis_title="X",
+            yaxis_title="Y"
+        )
+
+        return fig_e, fig_h
+
+
+            
+
+
+            
+        
+            
+
+
+
+
     def plot_field_interactive(self, 
                                runner="run_tm", 
                                k_point=mp.Vector3(0, 0), 
