@@ -317,7 +317,7 @@ class PhotonicCrystal:
         raise NotImplementedError
     
 
-    def look_for_mode(self, polarization, k_point, freq, k_point_max_distance = None, freq_tolerance=0.01):
+    def look_for_mode(self, polarization, k_point, freq,  freq_tolerance=0.01, k_point_max_distance = None):
         """
         Look for a mode with the specified polarization, k-point, and frequency.
 
@@ -1538,14 +1538,13 @@ class CrystalSlab(PhotonicCrystal):
         return geometry
 
                             
-        
-
 
     def plot_field(self, 
             target_polarization, 
             target_k_point, 
             target_frequency, 
-            frequency_tolerance, 
+            frequency_tolerance = 0.01, 
+            k_point_max_distance = None,
             periods: int=1, 
             component: int = 2, 
             quantity: str = "real", 
@@ -1567,8 +1566,8 @@ class CrystalSlab(PhotonicCrystal):
         Returns:
             tuple: A tuple containing the electric field figure and the magnetic field figure.
         """
-        target_modes = self.look_for_mode(target_polarization, target_k_point, target_frequency, frequency_tolerance)
-        
+        target_modes = self.look_for_mode(target_polarization, target_k_point, target_frequency, freq_tolerance = frequency_tolerance, k_point_max_distance = k_point_max_distance)
+        print(len(target_modes))
         
         with suppress_output():
             self.run_dumb_simulation()
@@ -1638,7 +1637,7 @@ class CrystalSlab(PhotonicCrystal):
                                 line=dict(color='black', width=2),
                                 showscale=False,
                                 opacity=0.7,
-                                visible=True if i == num_plots-1 else False)  # Only the first mode is visible
+                                visible=True if i ==  0  else False)  # Only the first mode is visible
             contour_h = contour_e  # Same contour for H-field figure
 
             # Add the contour trace
@@ -1647,10 +1646,10 @@ class CrystalSlab(PhotonicCrystal):
 
             # Add the heatmap for the electric field
             heatmap_e = go.Heatmap(z=e_field.T, colorscale=colorscale, zsmooth='best', opacity=0.9,
-                                    showscale=True, visible= True if i == num_plots-1 else False)
+                                    showscale=True, visible= True if i == 0 else False)
             # Add the heatmap for the magnetic field
             heatmap_h = go.Heatmap(z=h_field.T, colorscale=colorscale, zsmooth='best', opacity=0.9,
-                                    showscale=True, visible= True if i == num_plots-1 else False)
+                                    showscale=True, visible= True if i == 0 else False)
 
             # Add the heatmap trace
             fig_e.add_trace(heatmap_e)
@@ -1679,9 +1678,12 @@ class CrystalSlab(PhotonicCrystal):
                                             {'title':f"{data_str}:<br> {subtitle_h}"}
                                         ]))
 
-        data_str = f"Mode {i + 1} <br> k = [{k_point[0]:0.2f}, {k_point[1]:0.2f}], freq={freq:0.3f}, polarization={polarization}"
+        print(len(target_modes))
+        k_point = target_modes[0]["k_point"]
+        freq    = target_modes[0]["freq"]
+        data_str = f"Mode {0} <br> k = [{k_point[0]:0.2f}, {k_point[1]:0.2f}], freq={freq:0.3f}, polarization={polarization}"
         fig_e.update_layout(
-            updatemenus=[dict(active=num_plots - 1,
+            updatemenus=[dict(active=0,
                             buttons=dropdown_buttons_e,
                             x=1.15, y=1.15,
                             xanchor='left', yanchor='top')],
@@ -1712,16 +1714,213 @@ class CrystalSlab(PhotonicCrystal):
         )
 
         return fig_e, fig_h
+    
+    
 
+    def plot_field_components(self,
+                            target_polarization,
+                            target_k_point,
+                            target_frequency,
+                            frequency_tolerance=0.01,
+                            k_point_max_distance=None,
+                            periods: int = 1,
+                            quantity: str = "real",
+                            colorscale: str = 'RdBu',
+                            ):
+        """
+        Plot the field components (Ex, Ey, Ez) and (Hx, Hy, Hz) for specific modes with consistent color scales.
+
+        Args:
+            target_polarization (str): The polarization of the target mode.
+            target_k_point (tuple): The k-point of the target mode.
+            target_frequency (float): The frequency of the target mode.
+            frequency_tolerance (float): The tolerance for frequency similarity.
+            periods (int): The number of periods to extract. Default is 1.
+            quantity (str): The quantity to plot ('real', 'imag', or 'abs'). Default is 'real'.
+            colorscale (str): The colorscale to use for the plot. Default is 'RdBu'.
+
+        Returns:
+            tuple: A tuple containing the electric field figure and the magnetic field figure.
+        """
+
+        target_modes = self.look_for_mode(target_polarization, target_k_point, target_frequency,
+                                        freq_tolerance=frequency_tolerance, k_point_max_distance=k_point_max_distance)
+        print(f"Number of target modes found: {len(target_modes)}")
+
+        with suppress_output():
+            self.run_dumb_simulation()
+            md = mpb.MPBData(rectify=True, periods=periods, lattice=self.ms.get_lattice())
+            eps = md.convert(self.ms.get_epsilon())
+
+        z_points = eps.shape[2] // periods
+        z_mid = eps.shape[2] // 2
+
+        # Now take only epsilon in the center of the slab
+        eps = eps[..., z_mid]
+        # Calculate the midpoint between min and max of the permittivity (eps)
+        min_eps, max_eps = np.min(eps), np.max(eps)
+        midpoint = (min_eps + max_eps) / 2  # The level to be plotted
+
+        fig_e = make_subplots(rows=1, cols=3, subplot_titles=("Ex", "Ey", "Ez"))
+        fig_h = make_subplots(rows=1, cols=3, subplot_titles=("Hx", "Hy", "Hz"))
+        dropdown_buttons_e = []
+        dropdown_buttons_h = []
+
+        # For each mode, calculate separate min and max values for Ex, Ey, Ez (and similarly Hx, Hy, Hz)
+        for i, mode in enumerate(target_modes):
+            # Get field arrays for this mode
+            e_field_array = mpb.MPBArray(mode["e_field"], lattice=self.ms.get_lattice(), kpoint=mode["k_point"])
+            h_field_array = mpb.MPBArray(mode["h_field"], lattice=self.ms.get_lattice(), kpoint=mode["k_point"])
+
+            # Extract field components in the center of the slab
+            e_field_x = e_field_array[..., z_points // 2, 0]  # Shape (Nx, Ny)
+            e_field_y = e_field_array[..., z_points // 2, 1]  # Shape (Nx, Ny)
+            e_field_z = e_field_array[..., z_points // 2, 2]  # Shape (Nx, Ny)
+            h_field_x = h_field_array[..., z_points // 2, 0]  # Shape (Nx, Ny)
+            h_field_y = h_field_array[..., z_points // 2, 1]  # Shape (Nx, Ny)
+            h_field_z = h_field_array[..., z_points // 2, 2]  # Shape (Nx, Ny)
+
+            with suppress_output():
+                e_field_x = md.convert(e_field_x)
+                e_field_y = md.convert(e_field_y)
+                e_field_z = md.convert(e_field_z)
+                h_field_x = md.convert(h_field_x)
+                h_field_y = md.convert(h_field_y)
+                h_field_z = md.convert(h_field_z)
+
+            e_field = np.stack([e_field_x, e_field_y, e_field_z], axis=-1)
+            h_field = np.stack([h_field_x, h_field_y, h_field_z], axis=-1)                                    
+
+            # Select quantity to display (real, imag, abs)
+            if quantity == "real":
+                e_field = np.real(e_field)
+                h_field = np.real(h_field)
+            elif quantity == "imag":
+                e_field = np.imag(e_field)
+                h_field = np.imag(h_field)
+            elif quantity == "abs":
+                e_field = np.abs(e_field)
+                h_field = np.abs(h_field)
+            else:
+                raise ValueError("Invalid quantity. Choose 'real', 'imag', or 'abs'.")
+
+            # Calculate the component-specific min/max for E and H fields of this mode
+            e_min = np.min(e_field)
+            e_max = np.max(e_field)
+            h_min = np.min(h_field)
+            h_max = np.max(h_field)
+
+            # Components of the E and H fields
+            Ex, Ey, Ez = e_field[..., 0], e_field[..., 1], e_field[..., 2]
+            Hx, Hy, Hz = h_field[..., 0], h_field[..., 1], h_field[..., 2]
+
+            # Define visibility settings per mode, including contours as always visible
+            visible_status_e = [False] * (len(target_modes) * 6)  # 3 components per mode, with contour for each
+            visible_status_h = [False] * (len(target_modes) * 6)
+            # Make the contour visible by default
 
             
 
 
-            
-        
-            
+            # Make this mode's components and the corresponding contour visible in the initial layout 
+            for j in range(6):
+                visible_status_e[6*i + j] = True
+                visible_status_h[6*i + j] = True
 
 
+            # Add contour traces for permittivity to each subplot of fig_e and fig_h for this mode
+            fig_e.add_trace(go.Contour(z=eps.T, contours=dict(start=midpoint, end=midpoint, size=0.1, coloring='none'), line=dict(color='black', width=2), showscale=False, opacity=0.7, showlegend=False, visible=True if i == len(target_modes)-1 else False), row=1, col=1)
+            fig_e.add_trace(go.Contour(z=eps.T, contours=dict(start=midpoint, end=midpoint, size=0.1, coloring='none'), line=dict(color='black', width=2), showscale=False, opacity=0.7, showlegend=False, visible=True if i == len(target_modes)-1 else False), row=1, col=2)
+            fig_e.add_trace(go.Contour(z=eps.T, contours=dict(start=midpoint, end=midpoint, size=0.1, coloring='none'), line=dict(color='black', width=2), showscale=False, opacity=0.7, showlegend=False, visible=True if i == len(target_modes)-1 else False), row=1, col=3)
+
+            fig_h.add_trace(go.Contour(z=eps.T, contours=dict(start=midpoint, end=midpoint, size=0.1, coloring='none'), line=dict(color='black', width=2), showscale=False, opacity=0.7, showlegend=False, visible=True if i == len(target_modes)-1 else False), row=1, col=1)
+            fig_h.add_trace(go.Contour(z=eps.T, contours=dict(start=midpoint, end=midpoint, size=0.1, coloring='none'), line=dict(color='black', width=2), showscale=False, opacity=0.7, showlegend=False, visible=True if i == len(target_modes)-1 else False), row=1, col=2)
+            fig_h.add_trace(go.Contour(z=eps.T, contours=dict(start=midpoint, end=midpoint, size=0.1, coloring='none'), line=dict(color='black', width=2), showscale=False, opacity=0.7, showlegend=False, visible=True if i == len(target_modes)-1 else False), row=1, col=3)
+
+            # Add Ex, Ey, Ez with shared colorbar limits for the E field of this mode
+            fig_e.add_trace(go.Heatmap(z=Ex.T, colorscale=colorscale, showscale=False, zmin=e_min, zmax=e_max, visible=True if i == len(target_modes)-1 else False, zsmooth="best", opacity=0.8), row=1, col=1)
+            fig_e.add_trace(go.Heatmap(z=Ey.T, colorscale=colorscale, showscale=False, zmin=e_min, zmax=e_max, visible=True if i == len(target_modes)-1 else False, zsmooth="best", opacity=0.8), row=1, col=2)
+            fig_e.add_trace(go.Heatmap(z=Ez.T, colorscale=colorscale, showscale=True, colorbar=dict(title="E-field", len=0.75, thickness=15), zmin=e_min, zmax=e_max, visible=True if i == len(target_modes)-1 else False, zsmooth="best", opacity=0.8), row=1, col=3)
+
+            # Add Hx, Hy, Hz with shared colorbar limits for the H field of this mode
+            fig_h.add_trace(go.Heatmap(z=Hx.T, colorscale=colorscale, showscale=False, zmin=h_min, zmax=h_max, visible=True if i == len(target_modes)-1 else False, zsmooth="best", opacity=0.8), row=1, col=1)
+            fig_h.add_trace(go.Heatmap(z=Hy.T, colorscale=colorscale, showscale=False, zmin=h_min, zmax=h_max, visible=True if i == len(target_modes)-1 else False, zsmooth="best", opacity=0.8), row=1, col=2)
+            fig_h.add_trace(go.Heatmap(z=Hz.T, colorscale=colorscale, showscale=True, colorbar=dict(title="H-field", len=0.75, thickness=15), zmin=h_min, zmax=h_max, visible=True if i == len(target_modes)-1 else False, zsmooth="best", opacity=0.8), row=1, col=3)
+            
+            
+
+            # Dropdown data for E-field
+            k_point = mode["k_point"]
+            freq = mode["freq"]
+            polarization = mode["polarization"]
+            mode_description = f"Mode {i + 1}<br>k = [{k_point[0]:0.2f}, {k_point[1]:0.2f}], freq={freq:0.3f}, polarization={polarization}"
+            
+            dropdown_buttons_e.append(
+                dict(label=f"Mode {i + 1}",
+                    method='update',
+                    args=[{'visible': visible_status_e},
+                        {'title': f"{mode_description}: {quantity} of E-field components"}]))
+
+            dropdown_buttons_h.append(
+                dict(label=f"Mode {i + 1}",
+                    method='update',
+                    args=[{'visible': visible_status_h},
+                        {'title': f"{mode_description}: {quantity} of H-field components"}]))
+
+        # Layout and color settings
+        fig_e.update_layout(
+            title=f"{mode_description}: {quantity} of E-field components",
+            updatemenus=[dict(
+                active=len(target_modes) - 1,
+                buttons=dropdown_buttons_e)],
+            coloraxis=dict(colorbar=dict(len=0.75)),
+            width=1200, height=400,
+            xaxis_showgrid=False, yaxis_showgrid=False,
+            xaxis_zeroline=False, yaxis_zeroline=False,
+            hovermode="closest"
+        )
+
+        fig_h.update_layout(
+            title=f"{mode_description}: {quantity} of H-field components",
+            updatemenus=[dict(
+                active=len(target_modes) - 1,
+                buttons=dropdown_buttons_h)],
+            coloraxis=dict(colorbar=dict(len=0.75)),
+            width=1200, height=400,
+            xaxis_showgrid=False, yaxis_showgrid=False,
+            xaxis_zeroline=False, yaxis_zeroline=False,
+            hovermode="closest"
+        )
+
+        # Final adjustments
+        fig_e.update_xaxes(showticklabels=False)
+        fig_e.update_yaxes(showticklabels=False)
+        fig_h.update_xaxes(showticklabels=False)
+        fig_h.update_yaxes(showticklabels=False)
+
+        fig_e.update_layout(yaxis_scaleanchor="x", yaxis_scaleratio=1)
+        fig_h.update_layout(yaxis_scaleanchor="x", yaxis_scaleratio=1)
+        fig_e.update_layout(yaxis2_scaleanchor="x2", yaxis2_scaleratio=1)
+        fig_h.update_layout(yaxis2_scaleanchor="x2", yaxis2_scaleratio=1)
+        fig_e.update_layout(yaxis3_scaleanchor="x3", yaxis3_scaleratio=1)
+        fig_h.update_layout(yaxis3_scaleanchor="x3", yaxis3_scaleratio=1)
+
+
+        fig_e.update_xaxes(title_text="X-axis", row=1, col=1)
+        fig_e.update_yaxes(title_text="Y-axis", row=1, col=1)
+        fig_e.update_xaxes(title_text="X-axis", row=1, col=2)
+        fig_e.update_yaxes(title_text="Y-axis", row=1, col=2)
+        fig_e.update_xaxes(title_text="X-axis", row=1, col=3)
+        fig_e.update_yaxes(title_text="Y-axis", row=1, col=3)
+
+        fig_h.update_xaxes(title_text="X-axis", row=1, col=1)
+        fig_h.update_yaxes(title_text="Y-axis", row=1, col=1)
+        fig_h.update_xaxes(title_text="X-axis", row=1, col=2)
+        fig_h.update_yaxes(title_text="Y-axis", row=1, col=2)
+        fig_h.update_xaxes(title_text="X-axis", row=1, col=3)
+        fig_h.update_yaxes(title_text="Y-axis", row=1, col=3)
+
+        return fig_e, fig_h
 
 
     def plot_field_interactive(self, 
