@@ -11,6 +11,7 @@ import numpy as np
 import group_theory_analysis as gta
 from plotly.subplots import make_subplots
 from collections import defaultdict
+from functools import partial
 
 
 
@@ -239,6 +240,48 @@ class PhotonicCrystal:
             getattr(self.ms, runner)(get_mode_data)
             self.freqs[polarization] = self.ms.all_freqs
             self.gaps[polarization] = self.ms.gap_list
+
+    def run_simulation_with_output(self, runner="run_zeven", polarization=None):
+        """
+        Run the simulation and get mode data. Mode data are not stored in the crystal object, 
+        but are returned as a list of dictionaries.
+
+        Args:
+            runner (str): The name of the function to run the simulation. Default is 'run_zeven'. 
+            polarization (str, optional): The polarization of the simulation. Default is None. If None, it uses the runner name.
+
+        runner must correspond to an MPB runner. For example: \n
+        -'run_zeven': Run the simulation for even parity modes in z-axis.\n
+        -'run_zodd': Run the simulation for odd parity modes in z-axis.\n
+        -'run_tm': Run the simulation for transverse magnetic modes.\n
+        -'run_te': Run the simulation for transverse electric modes.\n
+        -'run': Do not consider symmetry.
+        """
+        if self.ms is None:
+            raise ValueError("Solver is not set. Call set_solver() before running the simulation.")
+        
+        if polarization is not None:
+            polarization = polarization
+        else:
+            if runner.startswith("run_"):
+                polarization = runner[4:]
+            else:
+                polarization = runner
+        modes=[]
+        # This is a custom mpb output function that stores the fields and frequencies
+        def get_mode_data(ms, band):
+            mode = {
+                "h_field": ms.get_hfield(band, bloch_phase=True),
+                "e_field": ms.get_efield(band, bloch_phase=True),
+                "freq": ms.freqs[band-1],
+                "k_point": ms.current_k,
+                "polarization": polarization
+            }
+            modes.append(mode)
+        with suppress_output():
+            getattr(self.ms, runner)(get_mode_data)
+        return modes
+        
        
 
 
@@ -808,7 +851,76 @@ class PhotonicCrystal:
         """
         raise NotImplementedError("calculate_effective_parameter method not implemented yet.")  
 
-    
+    def sweep_geometry_parameter(self, geom : partial, param_to_sweep: str, sweep_values: list, num_bands: int =4)-> list:
+        
+        """
+        Sweep a parameter of the geometry and run simulations for each value.
+        
+        Args:
+            geom (function): The geometry function to sweep.
+            param_to_sweep (str): The parameter to sweep.
+            sweep_values (list): The values to sweep.
+            num_bands (int, optional): The number of bands to calculate. Defaults to 4.
+        
+        Returns:
+            list: A list of dictionaries with the simulation data.
+
+        """
+        data = []
+        old_geom  = self.geometry
+        for value in sweep_values:
+            kwargs = {param_to_sweep: value}
+            self.geometry = geom(**kwargs)
+            self.num_bands = num_bands
+            self.set_solver(k_point=mp.Vector3())
+            modes_zeven = self.run_simulation_with_output(runner="run_te", polarization="te")
+            modes_zodd  = self.run_simulation_with_output(runner="run_tm", polarization="tm")
+            data.append({
+                'parameter_value': value,
+                'modes_zeven': modes_zeven,
+                'modes_zodd': modes_zodd,
+                'parameter_name': param_to_sweep,
+            })
+        self.geometry = old_geom
+        return data
+
+    def plot_sweep_result(self, data, fig=None) -> go.Figure:
+        """
+        Plot the sweep result using Plotly.
+
+        Args:
+            data (list): The data from the sweep.
+            fig (go.Figure): The Plotly figure to add the plot to.
+
+        Returns:
+            go.Figure: The Plotly figure object.
+        """
+
+        if fig is None:
+            fig = go.Figure()
+
+        # For each data parameter value in the x axis, add all the modes frequencies (mode["freq"])in the y axis
+        num_bands = len(data[0]['modes_zeven'])
+        for i in range(num_bands):
+            modes_zeven = [d['modes_zeven'][i] for d in data]
+            modes_zodd = [d['modes_zodd'][i] for d in data]
+            param_values = [d['parameter_value'] for d in data]   
+            fig.add_trace(go.Scatter(x=param_values, y=[m["freq"] for m in modes_zeven], mode='lines+markers', name=f'Band {i} TE', line=dict(color='red'), marker=dict(symbol=i, size=10)))
+            fig.add_trace(go.Scatter(x=param_values, y=[m["freq"] for m in modes_zodd], mode='lines+markers', name=f'Band {i} TM', line=dict(color='blue'), marker=dict(symbol=i, size=10)))
+        fig.update_layout(
+            autosize=False,
+            width=700,
+            height=700,
+        )   
+        
+        fig.update_layout(
+            xaxis_title='Parameter Value',
+            yaxis_title='Frequency (c/a)',
+            title=f"Sweep of {data[0]['parameter_name']}",
+            showlegend=True
+        )
+
+        return fig
     
     @staticmethod
     def basic_geometry():
@@ -857,6 +969,11 @@ def suppress_output():
         finally:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
+
+    
+    
+
+
 
 
 
@@ -1239,7 +1356,7 @@ class Crystal2D(PhotonicCrystal):
             eps_atom (float): The dielectric constant of the atom. Default is 1.
             eps_bulk (float): The dielectric constant of the bulk. Default is 12.
 
-        Returns:
+        Return
             list: A list of geometric objects defining the photonic crystal.
         """
 
@@ -2108,3 +2225,5 @@ class CrystalSlab(PhotonicCrystal):
     
 
 
+
+# %%
