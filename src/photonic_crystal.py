@@ -570,7 +570,7 @@ class PhotonicCrystal:
     
     def plot_field_components(
             self,
-            arget_polarization,
+            target_polarization,
             target_k_point,
             target_frequency,
             frequency_tolerance=0.01,
