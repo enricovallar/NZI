@@ -1,0 +1,21 @@
+site_name: My Docs
+theme:
+  name: 'material'
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_signature: true
+            sorting: source
+
+nav:
+  - Home: index.md
+  - API Reference:
+      - Photonic Crystal: photonic_crystal.md
+
+
+watch: 
+  - src
