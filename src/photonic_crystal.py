@@ -12,6 +12,8 @@ import group_theory_analysis as gta
 from plotly.subplots import make_subplots
 from collections import defaultdict
 from functools import partial
+from crystal_geometries import Crystal_Geometry, Crystal2D_Geometry, CrystalSlab_Geometry
+from crystal_materials import Crystal_Materials
 
 
 
@@ -70,6 +72,8 @@ class PhotonicCrystal:
     """
     def __init__(self,
                 lattice_type = None,
+                material: Crystal_Materials = None,
+                geometry: Crystal_Geometry = None, 
                 num_bands: int = 6,
                 resolution: tuple[int, int] | int = 32,
                 interp: int = 4,
@@ -80,34 +84,39 @@ class PhotonicCrystal:
                 ):
         """
         Initializes the PhotonicCrystal class with the given parameters.
-                Args:
-                    lattice_type (str, optional): Type of the lattice. Defaults to None.
-                    num_bands (int, optional): Number of bands. Defaults to 6.
-                    resolution (tuple[int, int] | int, optional): Resolution of the simulation. Defaults to 32.
-                    interp (int, optional): Interpolation factor for k-points. Defaults to 4.
-                    periods (int, optional): Number of periods. Defaults to 3.
-                    pickle_id (str, optional): Identifier for pickling. Defaults to None.
-                    k_points (list, optional): List of k-points. Defaults to None.
-                    use_XY (bool, optional): Flag to use XY plane. Defaults to True.
-                Attributes:
-                    lattice_type (str): Type of the lattice.
-                    num_bands (int): Number of bands.
-                    resolution (tuple[int, int] | int): Resolution of the simulation.
-                    interp (int): Interpolation factor for k-points.
-                    periods (int): Number of periods.
-                    pickle_id (str): Identifier for pickling.
-                    has_been_run (bool): Flag indicating if the simulation has been run.
-                    geometry_lattice (None): Geometry lattice, set with basic lattice method.
-                    k_points (list): List of k-points.
-                    k_points_interpolated (list): Interpolated k-points.
-                    basic_geometry (None): Basic geometry, set with basic geometry method.
-                    ms (None): Placeholder for ms attribute.
-                    md (None): Placeholder for md attribute.
-                    freqs (dict): Dictionary to store frequencies.
-                    gaps (dict): Dictionary to store gaps.
-                    epsilon (None): Placeholder for epsilon attribute.
-                    modes (list): List to store modes.
-                    use_XY (bool): Flag to use XY plane.
+        
+        Args:
+            lattice_type (str, optional): Type of the lattice. Defaults to None.
+            material (Crystal_Materials, optional): The material object. Defaults to None.
+            geometry (Crystal_Geometry, optional): The geometry object. Defaults to None.
+            num_bands (int, optional): Number of bands. Defaults to 6.
+            resolution (tuple[int, int] | int, optional): Resolution of the simulation. Defaults to 32.
+            interp (int, optional): Interpolation factor for k-points. Defaults to 4.
+            periods (int, optional): Number of periods. Defaults to 3.
+            pickle_id (str, optional): Identifier for pickling. Defaults to None.
+            k_points (list, optional): List of k-points. Defaults to None.
+            use_XY (bool, optional): Flag to use XY plane. Defaults to True.
+        
+        Attributes:
+            lattice_type (str): Type of the lattice.
+            num_bands (int): Number of bands.
+            resolution (tuple[int, int] | int): Resolution of the simulation.
+            interp (int): Interpolation factor for k-points.
+            periods (int): Number of periods.
+            pickle_id (str): Identifier for pickling.
+            has_been_run (bool): Flag indicating if the simulation has been run.
+            geometry_lattice (None): Geometry lattice, set with basic lattice method.
+            k_points (list): List of k-points.
+            k_points_interpolated (list): Interpolated k-points.
+            material (Crystal_Materials): Material of the photonic crystal.
+            geometry (Crystal_Geometry): Geometry of the photonic crystal.
+            ms (None): Placeholder for ms attribute.
+            md (None): Placeholder for md attribute.
+            freqs (dict): Dictionary to store frequencies.
+            gaps (dict): Dictionary to store gaps.
+            epsilon (None): Placeholder for epsilon attribute.
+            modes (list): List to store modes.
+            use_XY (bool): Flag to use XY plane.
         """
         self.lattice_type = lattice_type
         self.num_bands = num_bands
@@ -123,12 +132,12 @@ class PhotonicCrystal:
         if self.k_points is not None:
             self.k_points_interpolated = mp.interpolate(self.interp, self.k_points)
         
-        #slef.geometry_lattice, self.k_points = self.basic_lattice()
-
-        #this values are set with basic geometry method
-        self.basic_geometry = None
-        #self.geometry = self.basic_geometry()
-
+       
+        #material
+        self.material = material if material is not None else PhotonicCrystal.basic_material()
+        
+        #geometry
+        self.geometry = geometry if geometry is not None else PhotonicCrystal.basic_geometry(material = self.material)
 
         self.ms = None
         self.md = None
@@ -138,6 +147,8 @@ class PhotonicCrystal:
         self.epsilon = None
         self.modes= []
         self.use_XY = use_XY
+
+        
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -188,13 +199,13 @@ class PhotonicCrystal:
         """
 
         if k_point is not None:
-            self.ms = mpb.ModeSolver(geometry=self.geometry,
+            self.ms = mpb.ModeSolver(geometry=self.geometry.to_list(),
                                   geometry_lattice=self.geometry_lattice,
                                   k_points=[k_point],
                                   resolution=self.resolution,
                                   num_bands=self.num_bands)
         else:
-            self.ms = mpb.ModeSolver(geometry=self.geometry,
+            self.ms = mpb.ModeSolver(geometry=self.geometry.to_list(),
                                     geometry_lattice=self.geometry_lattice,
                                     k_points=self.k_points_interpolated,
                                     resolution=self.resolution,
@@ -294,7 +305,7 @@ class PhotonicCrystal:
         """
 
         #run the simulation in the gamma point, find one mode
-        self.ms = mpb.ModeSolver(geometry=self.geometry,
+        self.ms = mpb.ModeSolver(geometry=self.geometry.to_list(),
                                   geometry_lattice=self.geometry_lattice,
                                   k_points=[mp.Vector3()],
                                   resolution=self.resolution,
@@ -398,6 +409,16 @@ class PhotonicCrystal:
                 f"k-point: ({kp.x:.4f}, {kp.y:.4f}, {kp.z:.4f})<br>frequency: {f:.4f}"
                 for kp, f in zip(k_points_interpolated, band)
             ]
+
+
+            
+            modes =[]
+            for i, kp in enumerate(k_points_interpolated):
+                mode = self.look_for_mode(polarization, kp, band[i], freq_tolerance=1e-12)
+                modes.append(mode[0])
+            
+            
+
             # Add the line trace with hover info
             fig.add_trace(go.Scatter(
                 x=xs, 
@@ -406,7 +427,7 @@ class PhotonicCrystal:
                 line=dict(color=color),
                 text=hover_texts,  # Custom hover text
                 hoverinfo='text',  # Display only the custom hover text
-                customdata=[(kp.x, kp.y, kp.z, f) for kp, f in zip(k_points_interpolated, band)],  # Attach k-points and frequency as custom data
+                customdata=[(kp.x, kp.y, kp.z, f, polarization) for kp, f in zip(k_points_interpolated, band)],  # Attach k-points and frequency as custom data
                 showlegend=False,  # Hide from legend (we’ll add a separate legend entry)
                 legendgroup=polarization,  # Group traces by polarization for toggling visibility
                 visible=True,  # Initially visible
@@ -414,7 +435,7 @@ class PhotonicCrystal:
                 selected=dict(marker=dict(color="red", size=10)),  # Change color and size of selected points
                 unselected=dict(marker=dict(opacity=0.3))  # Make unselected points more transparent
             ))
-
+        
         # Add bandgap shading (optional, grouped with the polarization for toggling visibility)
         for gap in gaps:
             if gap[0] > 1:
@@ -915,7 +936,44 @@ class PhotonicCrystal:
         """
         raise NotImplementedError("calculate_effective_parameter method not implemented yet.")  
 
-    def sweep_geometry_parameter(self, geom : partial, param_to_sweep: str, sweep_values: list, num_bands: int =4)-> list:
+    def sweep_geometry_parameter(self, param_to_sweep: str, sweep_values: list, num_bands: int =4)-> list:
+        
+        """
+        Sweep a parameter of the geometry and run simulations for each value.
+        
+        Args:
+            param_to_sweep (str): The parameter to sweep.
+            sweep_values (list): The values to sweep.
+            num_bands (int, optional): The number of bands to calculate. Defaults to 4.
+        
+        Returns:
+            list: A list of dictionaries with the simulation data.
+
+        """
+        data = []
+        old_geom  = self.geometry
+        old_num_bands = self.num_bands
+
+        partial_geom = self.geometry.to_partial(exclude_key=param_to_sweep)
+        for value in sweep_values:
+            kwargs = {param_to_sweep: value}
+            self.geometry = partial_geom(**kwargs)
+            self.num_bands = num_bands
+            self.set_solver(k_point=mp.Vector3())
+            modes_zeven = self.run_simulation_with_output(runner="run_zeven", polarization="zeven")
+            modes_zodd  = self.run_simulation_with_output(runner="run_zodd", polarization="zodd")
+            data.append({
+                'parameter_value': value,
+                'modes_zeven': modes_zeven,
+                'modes_zodd': modes_zodd,
+                'parameter_name': param_to_sweep,
+            })
+        self.geometry = old_geom
+        self.num_bands = old_num_bands
+        return data
+    
+
+    def sweep_geometry_parameter_old(self, geom : partial, param_to_sweep: str, sweep_values: list, num_bands: int =4)-> list:
         
         """
         Sweep a parameter of the geometry and run simulations for each value.
@@ -932,13 +990,14 @@ class PhotonicCrystal:
         """
         data = []
         old_geom  = self.geometry
+        old_num_bands = self.num_bands
         for value in sweep_values:
             kwargs = {param_to_sweep: value}
             self.geometry = geom(**kwargs)
             self.num_bands = num_bands
             self.set_solver(k_point=mp.Vector3())
-            modes_zeven = self.run_simulation_with_output(runner="run_te", polarization="te")
-            modes_zodd  = self.run_simulation_with_output(runner="run_tm", polarization="tm")
+            modes_zeven = self.run_simulation_with_output(runner="run_zeven", polarization="zeven")
+            modes_zodd  = self.run_simulation_with_output(runner="run_zodd", polarization="zodd")
             data.append({
                 'parameter_value': value,
                 'modes_zeven': modes_zeven,
@@ -946,7 +1005,10 @@ class PhotonicCrystal:
                 'parameter_name': param_to_sweep,
             })
         self.geometry = old_geom
+        self.num_bands = old_num_bands
         return data
+    
+
 
     def plot_sweep_result(self, data, fig=None) -> go.Figure:
         """
@@ -987,22 +1049,36 @@ class PhotonicCrystal:
         return fig
     
     @staticmethod
-    def basic_geometry():
+    def basic_geometry(**kwargs):
         """ 
         Define the basic geometry of the photonic crystal.
         Must be implemented in the derived class.
         """
-
         raise NotImplementedError
     
     @staticmethod
-    def basic_lattice():
+    def basic_lattice(**kwargs):
         """
         Define the basic lattice of the photonic crystal.
         Must be implemented in the derived class.
         """
 
         raise NotImplementedError
+    
+    @staticmethod
+    def basic_material():
+        """
+        Define the basic material of the photonic crystal.
+        Must be implemented in the derived class.
+        """
+
+        material = Crystal_Materials()
+        material.atom = {"epsilon": 1}
+        material.background = {"epsilon": 1}
+        material.substrate = {"epsilon": 1}
+        material.bulk = {"epsilon": 11.8}
+        return material
+    
   
     
 
@@ -1082,7 +1158,8 @@ class Crystal2D(PhotonicCrystal):
                 interp: int =4,
                 periods: int =3, 
                 pickle_id = None,
-                geometry = None,
+                material : Crystal_Materials = None,
+                geometry: Crystal2D_Geometry = None,
                 use_XY = True,
                 k_point_max = 0.2):
         
@@ -1096,11 +1173,12 @@ class Crystal2D(PhotonicCrystal):
             interp (int): The interpolation factor for k-points. Default is 4.
             periods (int): The number of periods to simulate. Default is 3.
             pickle_id (str): The ID for pickling the simulation. Default is None.
+            material (Crystal_Materials): The material of the photonic crystal. Default is None.
             geometry (list): The geometry of the photonic crystal. Default is None.
             use_XY (bool): Whether to use the X and Y directions for the x-axis or high symmetry points. Default is True.
         """
       
-        super().__init__(lattice_type, num_bands, resolution, interp, periods, pickle_id, use_XY=use_XY)
+        super().__init__(lattice_type, material, geometry, num_bands, resolution, interp, periods, pickle_id, use_XY=use_XY)
         
         self.geometry_lattice, self.k_points = self.basic_lattice(lattice_type)
         if use_XY is True:
@@ -1109,7 +1187,8 @@ class Crystal2D(PhotonicCrystal):
                 mp.Vector3(0, 0 ,0 ),       # Gamma
                 mp.Vector3(0, k_point_max,0)        # Y
             ]
-        self.geometry = geometry if geometry is not None else self.basic_geometry()
+
+        self.geometry = geometry if geometry is not None else Crystal2D.basic_geometry(material = self.material)
         self.k_points_interpolated = mp.interpolate(interp, self.k_points)
         
 
@@ -1604,124 +1683,14 @@ class Crystal2D(PhotonicCrystal):
         ]
         return lattice, k_points
     
-
-    @staticmethod
-    def basic_geometry(radius_1=0.2, 
-                       eps_atom_1=1, 
-                       radius_2=None, 
-                       eps_atom_2=None,
-                       eps_bulk = 12, 
-                       )-> list: 
-        """
-        Define a basic geometry for the photonic crystal.
-        So far only one atom has been tested. It uses cylinders to define the geometry.
-
-        Args:
-            radius_1 (float): The radius of the first atom. Default is 0.2.
-            eps_atom_1 (float): The dielectric constant of the first atom. Default is 1.
-            radius_2 (float, optional): The radius of the second atom. Default is None.
-            eps_atom_2 (float, optional): The dielectric constant of the second atom. Default is None.
-            eps_bulk (float): The dielectric constant of the bulk. Default is 12.
-
-        Returns:
-            list: A list of geometric objects defining the photonic crystal.
-
-        
-        """
-
-        geometry = [
-            mp.Block(
-                size = mp.Vector3(mp.inf, mp.inf),
-                material=mp.Medium(epsilon=eps_bulk)),
-            ]
-        if radius_2 is None:
-            geometry.append(mp.Cylinder(radius_1, 
-                                        material=mp.Medium(epsilon=eps_atom_1),
-                                        center = mp.Vector3(0,0)))
-        else:
-            geometry.append(mp.Cylinder(radius_1, 
-                                        material=mp.Medium(epsilon=eps_atom_1),
-                                        center = mp.Vector3(-0.5,-0.5)))
-            geometry.append(mp.Cylinder(radius_2, 
-                                        material=mp.Medium(epsilon=eps_atom_2),
-                                        center = mp.Vector3(.5,.5)))
-        return geometry
     
     @staticmethod
-    def ellipsoid_geometry(e1: float=0.2, 
-                           e2: float = 0.3,
-                           eps_atom: float = 1, 
-                           eps_bulk: float= 12)->list:
-        """
-        Define an ellipsoid geometry for the photonic crystal.
-
-        Args:
-            e1 (float): The first radius of the ellipsoid. Default is 0.2.
-            e2 (float): The second radius of the ellipsoid. Default is 0.3.
-            eps_atom (float): The dielectric constant of the atom. Default is 1.
-            eps_bulk (float): The dielectric constant of the bulk. Default is 12.
-
-        Return
-            list: A list of geometric objects defining the photonic crystal.
-        """
-
-        geometry = [
-            mp.Block(
-                size = mp.Vector3(mp.inf, mp.inf),
-                material=mp.Medium(epsilon=eps_bulk)),
-            ]   
-        
-        size=mp.Vector3(e1,e2, mp.inf)
-        geometry.append(mp.Ellipsoid(size=size,
-                                     material=mp.Medium(epsilon=eps_atom),
-                                     center=mp.Vector3(0,0)))
+    def basic_geometry(r = 0.2, material = None):
+        if material is None:
+            material = PhotonicCrystal.basic_material()
+        geometry = Crystal2D_Geometry(material = material, geometry_type='cylinder', radius=r)
         return geometry
-    
-    @staticmethod
-    def advanced_material_geometry(
-        radius_1 = 0.2,
-        epsilon_diag = mp.Vector3(12, 12, 12),
-        epsilon_offdiag = mp.Vector3(0, 0, 0),
-        chi2_diag = mp.Vector3(0,0,0),
-        
-        chi3_diag = mp.Vector3(0,0,0),
-        
-        eps_atom_1 = 1
-    )-> list:
-        """
-        Define an advanced material geometry for the photonic crystal.
-
-        Args:
-            radius_1 (float): The radius of the atom. Default is 0.2.
-            epsilon_diag (mp.Vector3): The diagonal components of the dielectric tensor. Default is (12, 12, 12).
-            epsilon_offdiag (mp.Vector3): The off-diagonal components of the dielectric tensor. Default is (0, 0, 0).
-            chi2_diag (mp.Vector3): The diagonal components of the second-order nonlinear susceptibility tensor. Default is (0, 0, 0).
-            chi3_diag (mp.Vector3): The diagonal components of the third-order nonlinear susceptibility tensor. Default is (0, 0, 0).
-            eps_atom_1 (float): The dielectric constant of the atom. Default is 1.
-
-        Returns:
-            list: A list of geometric objects defining the photonic crystal.
-        """
-
-        
-        geometry =[
-            mp.Block(
-                size = mp.Vector3(mp.inf, mp.inf),
-                material = mp.Medium(
-                    epsilon_diag=epsilon_diag,
-                    epsilon_offdiag = epsilon_offdiag, 
-                    E_chi2_diag = chi2_diag, 
-                    E_chi3_diag = chi3_diag,
-                )
-            )
-        ]
-
-        geometry.append(mp.Cylinder(radius_1, 
-                                        material=mp.Medium(epsilon=eps_atom_1),
-                                        center = mp.Vector3(0,0)))
-        return geometry
-    
-       
+              
     
     
 
@@ -1765,6 +1734,7 @@ class CrystalSlab(PhotonicCrystal):
 
     def __init__(self,
                 lattice_type = "square",
+                material: Crystal_Materials = None,
                 num_bands: int = 4,
                 resolution = mp.Vector3(32,32,16),
                 interp: int =2,
@@ -1778,18 +1748,19 @@ class CrystalSlab(PhotonicCrystal):
 
         Args:
             lattice_type (str): The type of lattice. It can be 'square' or 'triangular'. Default is 'square'.
+            material (Crystal_Materials): The material object for the photonic crystal. Default is None.
             num_bands (int): The number of bands to calculate. Default is 4.
             resolution (mp.Vector3): The resolution of the simulation. Default is mp.Vector3(32, 32, 16).
             interp (int): The interpolation factor for k-points. Default is 2.
             periods (int): The number of periods to use in some plotting functions. Default is 3.
             pickle_id (str): The ID for pickling the simulation. Default is None.
-            geometry (list): The geometry of the photonic crystal. Default is None. If it is none, the basic geometry is used.
+            geometry (CrystalSlab_Geometry): The geometry of the photonic crystal. Default is None. If it is none, the basic geometry is used.
             use_XY (bool): Whether to use the X and Y directions for the x-axis or high symmetry points. Default is True.
             k_point_max (float): The maximum k-point value. Default is 0.2.
         """
 
 
-        super().__init__(lattice_type, num_bands, resolution, interp, periods, pickle_id, use_XY=True)
+        super().__init__(lattice_type, material,geometry, num_bands, resolution, interp, periods, pickle_id, use_XY=True)
         
         
         self.geometry_lattice, self.k_points = self.basic_lattice(lattice_type)
@@ -1944,202 +1915,16 @@ class CrystalSlab(PhotonicCrystal):
         ]
         return lattice, k_points
     
-    @staticmethod
-    def basic_geometry(radius_1=0.2,  
-                       eps_atom_1=1, 
-                       radius_2=None, 
-                       eps_atom_2=None,
-                       eps_bulk = 12,
-                       height_supercell=4, 
-                       height_slab=0.5,
-                       eps_background=1,
-                       eps_substrate=None,
-                       )-> list:
-        """
-        Define the basic geometry for the photonic crystal.
-        Biatomic structures have not been tested. 
-        
-        Args:
-            radius_1 (float): The radius of the first atom. Default is 0.2.
-            eps_atom_1 (float): The dielectric constant of the first atom. Default is 1.
-            radius_2 (float, optional): The radius of the second atom. Default is None.
-            eps_atom_2 (float, optional): The dielectric constant of the second atom. Default is None.
-            eps_bulk (float): The dielectric constant of the bulk. Default is 12.
-            height_supercell (float): The height of the supercell. Default is 4.
-            height_slab (float): The height of the slab. Default is 0.5.
-            eps_background (float): The dielectric constant of the background. Default is 1.
-            eps_substrate (float, optional): The dielectric constant of the substrate. Default is None.
-
-        Returns:
-            list: A list of geometric objects defining the photonic crystal.
-        """
-        
-        geometry = []
-        
-        #background
-        geometry.append(
-            mp.Block(
-                size = mp.Vector3(mp.inf, mp.inf, height_supercell),
-                material=mp.Medium(epsilon=eps_background)),
-            
-        )
-        
-        #substrate
-        if eps_substrate is not None:
-            geometry.append(mp.Block(
-                size = mp.Vector3(mp.inf, mp.inf, height_supercell*0.5),
-                center = mp.Vector3(0, 0, -height_supercell*0.25),
-                material=mp.Medium(epsilon=eps_substrate)))
-
-        
-        #slab
-        geometry.append(
-            mp.Block(
-                size = mp.Vector3(mp.inf, mp.inf, height_slab),
-                material=mp.Medium(epsilon=eps_bulk)),
-        )
-
-        #atoms    
-        if radius_2 is None:
-            geometry.append(mp.Cylinder(radius_1, 
-                                        material=mp.Medium(epsilon=eps_atom_1),
-                                        height=height_slab))
-                
-            
-        else:
-            geometry.append(mp.Cylinder(radius_1, 
-                                        material=mp.Medium(epsilon=eps_atom_1),
-                                        height=height_slab))
-            geometry.append(mp.Cylinder(radius_2, 
-                                        material=mp.Medium(epsilon=eps_atom_2),
-                                        height=height_slab))
-        
+    @staticmethod 
+    def basic_geometry(
+        radius = 0.2,
+        material: Crystal_Materials = None,
+    ):
+        if material is None:
+            material = PhotonicCrystal.basic_material()
+        geometry = CrystalSlab_Geometry(material = material, geometry_type='cylinder', radius = radius)
         return geometry
-    
-
-    def ellipsoid_geometry(e1: float=0.2,
-                           e2: float = 0.3,
-                           eps_atom = 1,
-                           height_supercell=4,
-                           height_slab=0.5,
-                           eps_background=1,
-                           eps_substrate=1,
-                           eps_diag = mp.Vector3(12, 12, 12),
-                           eps_offdiag = mp.Vector3(0, 0, 0),
-                           E_chi2_diag = mp.Vector3(0,0,0),
-                           E_chi3_diag = mp.Vector3(0,0,0),
-                           )-> list:       
-        """
-        Define an ellipsoid geometry for the photonic crystal.
-
-        Args:
-            e1 (float): The first radius of the ellipsoid. Default is 0.2.
-            e2 (float): The second radius of the ellipsoid. Default is 0.3.
-            eps_atom (float): The dielectric constant of the atom. Default is 1.
-            height_supercell (float): The height of the supercell. Default is 4.
-            height_slab (float): The height of the slab. Default is 0.5.
-            eps_background (float): The dielectric constant of the background. Default is 1.
-            eps_substrate (float): The dielectric constant of the substrate. Default is 1.
-            eps_diag (mp.Vector3): The diagonal components of the dielectric tensor. Default is (12, 12, 12).
-            eps_offdiag (mp.Vector3): The off-diagonal components of the dielectric tensor. Default is (0, 0, 0).
-            E_chi2_diag (mp.Vector3): The diagonal components of the second-order nonlinear susceptibility tensor. Default is (0, 0, 0).
-            E_chi3_diag (mp.Vector3): The diagonal components of the third-order nonlinear susceptibility tensor. Default is (0, 0, 0).
-
-        Returns:
-            list: A list of mpb geometric objects defining the photonic crystal.
-        """
-
-        geometry = [
-            #background
-            mp.Block(
-                size = mp.Vector3(mp.inf, mp.inf, height_supercell),
-                material=mp.Medium(epsilon=eps_background)),
-            #substrate
-            mp.Block(
-                size = mp.Vector3(mp.inf, mp.inf, height_supercell*0.5),
-                center = mp.Vector3(0, 0, -height_supercell*0.25),
-                material=mp.Medium(epsilon=eps_substrate)),
-            #slab
-            mp.Block(
-                size = mp.Vector3(mp.inf, mp.inf, height_slab),
-                material=mp.Medium(epsilon_diag=eps_diag,
-                                   epsilon_offdiag = eps_offdiag,
-                                   E_chi2_diag = E_chi2_diag,
-                                   E_chi3_diag = E_chi3_diag)),
-            #atom
-            mp.Ellipsoid(size=mp.Vector3(e1,e2, mp.inf),
-                         material=mp.Medium(epsilon=eps_atom),
-                         center=mp.Vector3(0,0,0))
-        ]
-        return geometry
-    
-    
-
-    def advanced_material_geometry(
-        radius_1 = 0.2,
-        epsilon_diag = mp.Vector3(12, 12, 12),
-        epsilon_offdiag =  mp.Vector3(0, 0, 0),
-        chi2_diag =  mp.Vector3(0,0,0),  
-        chi3_diag =  mp.Vector3(0,0,0),
-        eps_atom_1 = 1, 
-        eps_background  = 1, 
-        eps_substrate = 1,
-        height_supercell = 4, 
-        height_slab = 0.5
-    )-> list:
-        """
-        Define an advanced material geometry for the photonic crystal.
-
-        Args:
-            radius_1 (float): The radius of the atom. Default is 0.2.
-            epsilon_diag (mp.Vector3): The diagonal components of the dielectric tensor. Default is (12, 12, 12).
-            epsilon_offdiag (mp.Vector3): The off-diagonal components of the dielectric tensor. Default is (0, 0, 0).
-            chi2_diag (mp.Vector3): The diagonal components of the second-order nonlinear susceptibility tensor. Default is (0, 0, 0).
-            chi3_diag (mp.Vector3): The diagonal components of the third-order nonlinear susceptibility tensor. Default is (0, 0, 0).
-            eps_atom_1 (float): The dielectric constant of the atom. Default is 1.
-            eps_background (float): The dielectric constant of the background. Default is 1.
-            eps_substrate (float): The dielectric constant of the substrate. Default is 1.
-            height_supercell (float): The height of the supercell. Default is 4.
-            height_slab (float): The height of the slab. Default is 0.5.
-
-        Returns:
-            list: A list of geometric objects defining the photonic crystal.
-        """
-
         
-        geometry = []
-        
-        #background
-        geometry.append(
-            mp.Block(
-                size = mp.Vector3(mp.inf, mp.inf, height_supercell),
-                material=mp.Medium(epsilon=eps_background)),
-            
-        )
-        
-        #substrate
-        if eps_substrate is not None:
-            geometry.append(mp.Block(
-                size = mp.Vector3(mp.inf, mp.inf, height_supercell*0.5),
-                center = mp.Vector3(0, 0, -height_supercell*0.25),
-                material=mp.Medium(epsilon=eps_substrate)))
-            
-        #slab
-        geometry.append(
-            mp.Block(
-                size = mp.Vector3(mp.inf, mp.inf, height_slab),
-                material=mp.Medium(epsilon_diag=epsilon_diag, 
-                                   epsilon_offdiag = epsilon_offdiag,
-                                   E_chi2_diag = chi2_diag,
-                                   E_chi3_diag = chi3_diag,)
-                                ),
-        )
-
-        #atom 1
-        geometry.append(mp.Cylinder(radius_1, 
-                                        material=mp.Medium(epsilon=eps_atom_1),
-                                        height=height_slab))
-        return geometry
 
                             
 

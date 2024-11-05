@@ -15,6 +15,10 @@ import plotly.graph_objects as go
 from photonic_crystal import Crystal2D, CrystalSlab  # assuming the provided script is named photonic_crystal2.py
 from ui_elements import *
 import dash_daq as daq
+from crystal_materials import Crystal_Materials
+from crystal_geometries import Crystal_Geometry, CrystalSlab_Geometry, Crystal2D_Geometry
+import numpy as np
+
 
 
 
@@ -38,6 +42,9 @@ active_mode_groups = None
 
 # Create the layout
 app.layout = dbc.Container([
+    # Add a hidden div to your layout
+    html.Div(id='dummy-output', style={'display': 'none'}),
+    
     html.H1("Photonic Crystal Simulator"),
     
     # Configurator box (with a black border)
@@ -100,20 +107,21 @@ app.layout = dbc.Container([
         )
     ], className="mt-4"),
 
+    
+    # Buttons to show the dielectric and run the simulation
+    dbc.Row([
+        dbc.Col(dbc.Button("Update Crystal", id="update-crystal-button", color="primary"), width=4),
+        dbc.Col(dbc.Button("Show Dielectric", id="show-dielectric-button", color="primary"), width=4),
+        dbc.Col(dbc.Button("Run Simulation", id="run-simulation-button", color="primary"), width=4),
+    ], className="mt-3"),
+
     # Buttons to save and load the crystal
     dbc.Row([
-        dbc.Col(dcc.Upload(id='upload-crystal', children=dbc.Button("Load Crystal", color="secondary")), width={"size": 4}),
         dbc.Col(dbc.Button("Save Crystal", id="save-crystal-button", color="secondary"), width={"size": 4}),
-        dbc.Col(dbc.Button("Update Crystal", id="update-crystal-button", color="secondary"), width={"size": 4}),
+        dbc.Col(dcc.Upload(id='upload-crystal', children=dbc.Button("Load Crystal", color="secondary")), width={"size": 4}),
         dcc.Download(id="download-crystal")
     ], className="mt-3"),
 
-    # Buttons to show the dielectric and run the simulation
-    dbc.Row([
-        dbc.Col(dbc.Button("Show Dielectric", id="show-dielectric-button", color="primary", className="mr-2"), width={"size": 4}),
-        dbc.Col(dbc.Button("Run Simulation", id="run-simulation-button", color="primary", className="mr-2"), width={"size": 4}),
-        dbc.Col(width={"size": 4}),  # Blank column
-    ], className="mt-3"),
 
     # Scrollable text area for messages to the user
     dbc.Row([
@@ -126,8 +134,8 @@ app.layout = dbc.Container([
             )
         ]))
     ], className="mt-3"),
-    
-    
+ 
+     
 
     # Placeholder for results (two plots: epsilon on the left and bands on the right)
     dbc.Row([
@@ -135,69 +143,94 @@ app.layout = dbc.Container([
         dbc.Col(dcc.Graph(id='bands-graph', style={'height': '700px', 'width': '700px', 'padding-left': '200px'}, clickData=None), width=6),
     ], className="mt-4"),
 
+    # add horizontal line
+    html.Hr(style={'borderWidth': '3px'}),
+
+    # Explanation of the field plots
+    dbc.Row([
+        dbc.Col(html.H4("Select the options for the plots. Click in one point of the band diagram to see the corresponding E and H fields"), width=12),
+    ], className="mt-3"),
+
+    # Dropdown menu to choose the mathematical operation (real, imag, abs) to use in the plot functions
+    dbc.Row([
+        dbc.Col(html.Label("Select Operation"), width=4),
+        dbc.Col(dcc.Dropdown(
+            id='operation-dropdown',
+            options=[
+                {'label': 'Real', 'value': 'real'},
+                {'label': 'Imaginary', 'value': 'imag'},
+                {'label': 'Absolute Value', 'value': 'abs'}
+            ],
+            value='real'
+        ), width=8),
+    ], className="mt-3"),
+
+    # Input field for the frequency tolerance
+    dbc.Row([
+        dbc.Col(html.Label("Frequency Tolerance"), width=4),
+        dbc.Col(dcc.Input(
+            id='frequency-tolerance-input',
+            type='number',
+            value=0.01,
+            step=0.001,
+            min=0,
+            max=1,
+            style={'width': '100%'}
+        ), width=8),
+    ], className="mt-3"),
+
+    # Input field for the integer number of periods to plot
+    dbc.Row([
+        dbc.Col(html.Label("Number of Periods to Plot"), width=4),
+        dbc.Col(dcc.Input(
+            id='field-periods-to-plot-input',
+            type='number',
+            value=1,
+            step=1,
+            min=1,
+            style={'width': '100%'}
+        ), width=8),
+    ], className="mt-3"),
+    
    
-    # Placeholder for field plots (TE-like on the left and TM-like on the right)
+    # Placeholder for the electric field plot, three components
     dbc.Row([
-        dbc.Col(dcc.Graph(id='te-field-graph', style={'height': '700px', 'width': '700px', 'padding-right': '200px'}), width=6),
-        dbc.Col(dcc.Graph(id='tm-field-graph', style={'height': '700px', 'width': '700px', 'padding-left': '200px'}), width=6),
+        dbc.Col(dcc.Graph(id='e-field-graph', style={'height': '700px', 'width': '1400px'}), width=12),
     ], className="mt-4"),
+
+    # Placeholder for the magnetic field plot, three components
+    dbc.Row([
+        dbc.Col(dcc.Graph(id='h-field-graph', style={'height': '700px', 'width': '1400px'}), width=12),
+    ], className="mt-4"),
+
+    # Bold horizontal line
+    html.Hr(style={'borderWidth': '3px'}),
     
 
+    # Box to sweep geometry parameters
+    dbc.Card(
+        dbc.CardBody([
+            html.H4("Geometry Sweep"),
+            html.Div(id='geometry-sweep-box', children=[
+                dbc.Row(
+                    sweep_configuration_elements_list,
+                    className="mt-4"),
+            ])
+        ]),
+        style={'border': '2px solid black', 'padding': '10px', 'height': '100%', 'overflowY': 'scroll'}
+    ),
 
-     # Add the title of the section: vectorial field analysis
+    # Placeholder figure to plot the sweep result: 
     dbc.Row([
-        dbc.Col(html.H4("Vectorial Field Analysis"), width=12)
+        dbc.Col(
+            dcc.Graph(
+                id='sweep-result-graph',
+                style={'height': '700px', 'width': '1400px'}
+            ),
+            width=12
+        )
     ], className="mt-4"),
-
-    # Dropdown to select the polarization to group modes
-    dbc.Row([
-        dbc.Col(html.Label("Select polarization to group modes:"), width=4),
-        dbc.Col(dcc.Dropdown(id='polarization-group-dropdown', options=[], placeholder="Select polarization"), width=8),
-    ], className="mt-3"),
-
-    # Dropdown to select the k-point to group modes
-    dbc.Row([
-        dbc.Col(html.Label("Select k-point to group modes:"), width=4),
-        dbc.Col(dcc.Dropdown(id='k-point-group-dropdown', options=[], placeholder="Select k-point"), width=8),
-    ], className="mt-3"),
-
-    # Dropdown to select the frequency to group modes
-    dbc.Row([
-        dbc.Col(html.Label("Select frequency to group modes:"), width=4),
-        dbc.Col(dcc.Dropdown(id='frequency-group-dropdown', options=[], placeholder="Select frequency"), width=8),
-    ], className="mt-3"),
-
-    # Dropdown to select one mode in the group to plot
-    dbc.Row([
-        dbc.Col(html.Label("Select mode to plot:"), width=4),
-        dbc.Col(dcc.Dropdown(id='mode-selector-dropdown', options=[], placeholder="Select mode"), width=8),
-    ], className="mt-3"),
-
-    # Buttons to plot the vectorial field
-    dbc.Row([
-        dbc.Col(dbc.Button("Plot Vectorial Fields", id="plot-vectorial-field-button", color="primary", className="mr-2"), width={"size": 4}),
-        dbc.Col(dbc.Button("Plot Vectorial Fields - vectorial sum", id="sum-and-plot-vectorial-field-button", color="primary", className="mr-2"), width={"size": 4}),
-        dbc.Col(dbc.Button("Plot Vectorial Field - selected mode", id="plot-selected-vectorial-field-button", color="primary", className="mr-2"), width={"size": 4})
-    ], className="mt-3"),
-
-
-    # Placeholder for vectorial field plots (E-field on the left and H-field on the right)
-    dbc.Row([
-        dbc.Col(dcc.Graph(id='vectorial-e-field-graph', style={'height': '700px', 'width': '700px', 'padding-right': '200px'}), width=6),
-        dbc.Col(dcc.Graph(id='vectorial-h-field-graph', style={'height': '700px', 'width': '700px', 'padding-left': '200px'}), width=6),
-    ], className="mt-4"),
-
-    #Placeholder for the plot of the effective parameters
-    dbc.Row([
-        dbc.Col(dcc.Graph(id='effective-param-plot', style={'height': '700px', 'width': '700px', 'padding-right': '200px'}), width=12),
-    ], className="mt-4"),
-
-    #button to plot the effective parameters
-    dbc.Row([
-        dbc.Col(dbc.Button("Plot Effective Parameters", id="plot-effective-param-button", color="primary", className="mr-2"), width={"size": 4}),
-    ], className="mt-3"),
     
-
 ])
 
 # callback to update the configurator-box content when a different photonic crystal type is selected
@@ -205,7 +238,7 @@ app.layout = dbc.Container([
     [Output('geometry-configurator-box', 'children'),
      Output('material-configurator-box', 'children'),
      Output('solver-configurator-box', 'children'),
-     Output('crystal-type-dropdown', 'value')],
+    ],
     Input('crystal-type-dropdown', 'value')
 )
 def update_configurator(crystal_type):
@@ -218,18 +251,57 @@ def update_configurator(crystal_type):
         solver_configuration_elements['resolution-2d-input'].show()
         solver_configuration_elements['resolution-3d-input'].hide()
 
-        return geometry_configuration_elements_list, material_configuration_elements_list, solver_configuration_elements_list, crystal_type
-          
     elif crystal_type == 'slab':
         material_configuration_elements['epsilon-background-input'].show()
         geometry_configuration_elements['height-slab-input'].show()
         geometry_configuration_elements['height-supercell-input'].show()
         solver_configuration_elements['resolution-2d-input'].hide()
         solver_configuration_elements['resolution-3d-input'].show()
-        return geometry_configuration_elements_list, material_configuration_elements_list, solver_configuration_elements_list, crystal_type
-    else:
-        return [], [], [], '2d'
+
+    geometry_configuration_elements['crystal-type-dropdown'].change_value(crystal_type)  
+    return geometry_configuration_elements_list, material_configuration_elements_list, solver_configuration_elements_list
     
+    
+
+# Callback to update the geometry configurator box when a different geometry type is selected
+@app.callback(
+    Output('geometry-configurator-box', 'children', allow_duplicate=True),
+    Input('cell-geometry-dropdown', 'value'), 
+    State('crystal-type-dropdown', 'value')
+)
+def update_geometry_configurator(geometry_type, crystal_type):
+    global crystal_active, configuration_active
+    
+    if geometry_type == 'circular':
+        geometry_configuration_elements['a-input'].hide()
+        geometry_configuration_elements['b-input'].hide()
+        geometry_configuration_elements['edge-length-input'].hide()
+        geometry_configuration_elements['radius-input'].show()
+
+    elif geometry_type == 'square':
+        geometry_configuration_elements['a-input'].hide()
+        geometry_configuration_elements['b-input'].hide()
+        geometry_configuration_elements['edge-length-input'].show()
+        geometry_configuration_elements['radius-input'].hide()
+    elif geometry_type == 'elliptical':
+        geometry_configuration_elements['a-input'].show()
+        geometry_configuration_elements['b-input'].show()
+        geometry_configuration_elements['edge-length-input'].hide()
+        geometry_configuration_elements['radius-input'].hide()
+    elif geometry_type == 'rectangular':
+        geometry_configuration_elements['a-input'].show()
+        geometry_configuration_elements['b-input'].show()
+        geometry_configuration_elements['edge-length-input'].hide()
+        geometry_configuration_elements['radius-input'].hide()
+    else:
+        geometry_configuration_elements['a-input'].hide()
+        geometry_configuration_elements['b-input'].hide()
+        geometry_configuration_elements['edge-length-input'].hide()
+        geometry_configuration_elements['radius-input'].hide()  
+    geometry_configuration_elements['cell-geometry-dropdown'].change_value(geometry_type)
+    geometry_configuration_elements['crystal-type-dropdown'].change_value(crystal_type)
+    return geometry_configuration_elements_list
+
 
 # Callback to set the active crystal and configuration
 @app.callback(
@@ -239,10 +311,13 @@ def update_configurator(crystal_type):
      State('crystal-id-input', 'value'),
      State('crystal-type-dropdown', 'value'),
      State('lattice-type-dropdown', 'value'),
+     State('cell-geometry-dropdown', 'value'),
      State('radius-input', 'value'),
+     State('a-input', 'value'),
+     State('b-input', 'value'),
+     State('edge-length-input', 'value'),
      State('height-slab-input', 'value'),
      State('height-supercell-input', 'value'),
-
      State('advanced-material-toggle', 'on'),
      State('epsilon-bulk-input', 'value'),
      State('epsilon-atom-input', 'value'),
@@ -259,70 +334,91 @@ def update_configurator(crystal_type):
      State('periods-for-epsilon-plot-input', 'value'),
      State('periods-for-field-plot-input', 'value'),
      State('num-bands-input', 'value'),
-     State('k-point-max-input', 'value')
+     State('k-point-max-input', 'value'),
      ],
     prevent_initial_call=True
 )
-def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice_type, radius, height_slab, height_supercell, advanced_material, epsilon_bulk, epsilon_atom, epsilon_background, epsilon_diag, epsilon_offdiag, E_chi2_diag, E_chi3_diag, runner_1, runner_2, interpolation, resolution_2d, resolution_3d, periods_for_epsilon_plot, periods_for_field_plot, num_bands, k_point_max):
+def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice_type, 
+                   geometry_type, radius, a, b, edge_length,
+                   height_slab, height_supercell, advanced_material, epsilon_bulk, epsilon_atom, epsilon_background, 
+                   epsilon_diag, epsilon_offdiag, E_chi2_diag, E_chi3_diag, runner_1, runner_2, interpolation, 
+                   resolution_2d, resolution_3d, periods_for_epsilon_plot, periods_for_field_plot, num_bands, k_point_max):
     if n_clicks is None:
         return previous_message
 
     global crystal_active, configuration_active
     
+    if advanced_material is True:
+        bulk_material_configuration = {
+            'epsilon_diag': epsilon_diag,
+            'epsilon_offdiag': epsilon_offdiag,
+            'E_chi2_diag': E_chi2_diag,
+            'E_chi3_diag': E_chi3_diag
+        }
+    else:
+        bulk_material_configuration = {
+            'epsilon': epsilon_bulk
+        }
+    atom_epsilon = {
+        'epsilon': epsilon_atom
+    }
+    
+    material = Crystal_Materials()
+    material.background = {"epsilon": 1}
+    material.bulk = bulk_material_configuration
+    material.atom = atom_epsilon
+    material.substrate = {"epsilon": 1}
     if crystal_type == '2d':
-        if advanced_material:
-            geometry = Crystal2D.advanced_material_geometry(
-                radius_1=radius,
-                epsilon_diag=string_to_vector3(epsilon_diag),
-                epsilon_offdiag=string_to_vector3(epsilon_offdiag),
-                chi2_diag=string_to_vector3(E_chi2_diag),
-                chi3_diag=string_to_vector3(E_chi3_diag),
-                eps_atom_1=epsilon_atom,       
-            )
+        if geometry_type == 'circular':
+            radius = float(radius)
+            geometry = Crystal2D_Geometry(material=material, geometry_type=geometry_type, r=radius)
+        elif geometry_type == 'square':
+            edge_length = float(edge_length)
+            geometry = Crystal2D_Geometry(material=material, geometry_type=geometry_type, a=edge_length)
+        elif geometry_type == 'elliptical':
+            a = float(a)
+            b = float(b)
+            geometry = Crystal2D_Geometry(material=material, geometry_type=geometry_type, a=a, b=b)
+        elif geometry_type == "rectangular": 
+            a = float(a)
+            b = float(b)
+            geometry = Crystal2D_Geometry(material=material, geometry_type=geometry_type, a=a, b=b)
         else:
-            geometry = Crystal2D.basic_geometry(radius_1=radius, eps_atom_1=epsilon_atom, eps_bulk=epsilon_bulk)
+            raise ValueError(f"Invalid geometry type: {geometry_type}")
+        
+        
+
         crystal_active = Crystal2D(
             lattice_type=lattice_type,
+            geometry=geometry,
             num_bands=num_bands,  # Updated to use the provided num_bands
             resolution=resolution_2d,
             interp=interpolation,
             periods=periods_for_epsilon_plot,
             pickle_id=crystal_id,
-            geometry=geometry,
             k_point_max=k_point_max
         )
     elif crystal_type == 'slab':
-        if advanced_material:
-            geometry = CrystalSlab.advanced_material_geometry(
-                radius_1=radius,
-                epsilon_diag=string_to_vector3(epsilon_diag),
-                epsilon_offdiag=string_to_vector3(epsilon_offdiag),
-                chi2_diag=string_to_vector3(E_chi2_diag),
-                chi3_diag=string_to_vector3(E_chi3_diag),
-                eps_atom_1=epsilon_atom,
-                eps_background=epsilon_background,
-                height_slab=height_slab,
-                height_supercell=height_supercell
-            )
+        if geometry_type == 'circular':
+            geometry = CrystalSlab_Geometry(material=material, geometry_type=geometry_type, height_slab=height_slab, height_supercell=height_supercell, r=radius)
+        elif geometry_type == 'square':
+            geometry = CrystalSlab_Geometry(material=material, geometry_type=geometry_type, height_slab=height_slab, height_supercell=height_supercell, a=radius)
+        elif geometry_type == 'elliptical':
+            geometry = CrystalSlab_Geometry(material=material, geometry_type=geometry_type, height_slab=height_slab, height_supercell=height_supercell, a=radius, b=radius)
+        elif geometry_type == "rectangular":
+            geometry = CrystalSlab_Geometry(material=material, geometry_type=geometry_type, height_slab=height_slab, height_supercell=height_supercell, a=radius, b=radius)
         else:
-            geometry = CrystalSlab.basic_geometry(
-                radius_1=radius,
-                eps_atom_1=epsilon_atom,
-                eps_bulk=epsilon_bulk,
-                eps_background=epsilon_background,
-                height_slab=height_slab,
-                height_supercell=height_supercell
-            )
+            raise ValueError(f"Invalid geometry type: {geometry_type}")
+        
         crystal_active = CrystalSlab(
             lattice_type=lattice_type,
+            geometry=geometry,
             num_bands=num_bands,  # Updated to use the provided num_bands
             resolution=string_to_vector3(resolution_3d),
             interp=interpolation,
             periods=periods_for_epsilon_plot,
             pickle_id=crystal_id,
-            geometry=geometry,
             k_point_max=k_point_max,
-
         )
     else:
         return previous_message + "\nInvalid crystal type selected."
@@ -331,7 +427,11 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
         'crystal_id': crystal_id,
         'crystal_type': crystal_type,
         'lattice_type': lattice_type,
+        'geometry_type': geometry_type,
         'radius': radius,
+        'a': a,
+        'b': b,
+        'edge_length': edge_length,
         'height_slab': height_slab,
         'height_supercell': height_supercell,
         'advanced_material': advanced_material,
@@ -354,9 +454,8 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
     }
 
     new_message = f"""
-> The active crystal has been updated with the following configuration:
-{configuration_active}
-Has the simulation been run yet? {crystal_active.has_been_run}
+> The active crystal has been updated to {crystal_active.pickle_id}. Run the simulation to store modes.
+  Press Show Dielectric to plot the dielectric function (plotted for the gamma point, 1st band).
 """
     return previous_message + new_message
 
@@ -387,8 +486,6 @@ def save_crystal(n_clicks, previous_message):
 
     new_message = previous_message + "\nCrystal configuration has been saved successfully."
     print("saved")
-    
-
     return {
         'content': b64,
         'filename': f'crystal_configuration_{configuration_active["crystal_id"]}.pkl',
@@ -429,6 +526,45 @@ def load_crystal(contents, previous_message):
             material_configuration_elements['epsilon-background-input'].show()
             geometry_configuration_elements['height-slab-input'].show()
             geometry_configuration_elements['height-supercell-input'].show()
+
+        if configuration_active['advanced_material'] is True:
+            material_configuration_elements['epsilon-diag-input'].show()
+            material_configuration_elements['epsilon-offdiag-input'].show()
+            material_configuration_elements['epsilon-bulk-input'].hide()
+            material_configuration_elements['E-chi2-diag-input'].show()
+            material_configuration_elements['E-chi3-diag-input'].show()
+        else:
+            material_configuration_elements['epsilon-diag-input'].hide()
+            material_configuration_elements['epsilon-offdiag-input'].hide()
+            material_configuration_elements['epsilon-bulk-input'].show()
+            material_configuration_elements['E-chi2-diag-input'].hide()
+            material_configuration_elements['E-chi3-diag-input'].hide()
+        
+        if configuration_active['cell-geometry-dropdown'] == 'circular':
+            geometry_configuration_elements['a-input'].hide()
+            geometry_configuration_elements['b-input'].hide()
+            geometry_configuration_elements['edge-length-input'].hide()
+            geometry_configuration_elements['radius-input'].show()
+        elif configuration_active['cell-geometry-dropdown'] == 'square':
+            geometry_configuration_elements['a-input'].hide()
+            geometry_configuration_elements['b-input'].hide()
+            geometry_configuration_elements['edge-length-input'].show()
+            geometry_configuration_elements['radius-input'].hide()
+        elif configuration_active['cell-geometry-dropdown'] == 'elliptical':
+            geometry_configuration_elements['a-input'].show()
+            geometry_configuration_elements['b-input'].show()
+            geometry_configuration_elements['edge-length-input'].hide()
+            geometry_configuration_elements['radius-input'].hide()
+        elif configuration_active['cell-geometry-dropdown'] == 'rectangular':
+            geometry_configuration_elements['a-input'].show()
+            geometry_configuration_elements['b-input'].show()
+            geometry_configuration_elements['edge-length-input'].hide()
+            geometry_configuration_elements['radius-input'].hide()
+        else:
+            geometry_configuration_elements['a-input'].hide()
+            geometry_configuration_elements['b-input'].hide()
+            geometry_configuration_elements['edge-length-input'].hide()
+            geometry_configuration_elements['radius-input'].hide()
     
     for key in geometry_configuration_elements.keys():
         target_key = geometry_configuration_elements[key].parameter_id
@@ -457,12 +593,12 @@ def plot_epsilon(epsilon_fig):
 
     crystal_active.run_dumb_simulation()  # Run a dummy simulation to get the epsilon array
     crystal_active.extract_data()
-    msg  = "> dumb simulation has been run to quickly collect epsilon data"
+    msg  = "> A dumb simulation has been run to quickly collect epsilon data in gamma point (1st band)."
 
     if configuration_active["crystal_type"] == '2d':
-        epsilon_fig = crystal_active.plot_epsilon_interactive()
+        epsilon_fig = crystal_active.plot_epsilon()
     elif configuration_active["crystal_type"] == 'slab':
-        epsilon_fig = crystal_active.plot_epsilon_interactive(opacity=0.2, 
+        epsilon_fig = crystal_active.plot_epsilon(opacity=0.2, 
                                                               colorscale='matter', 
                                                               override_resolution_with=-1,
                                                               periods=configuration_active["periods_for_epsilon_plot"])
@@ -490,21 +626,21 @@ def run_simulation(crystal):
     colors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'brown', 'black', 'white']
     bands_fig = go.Figure()
     if isinstance(crystal, Crystal2D):
-        epsilon_fig = crystal.plot_epsilon_interactive()
+        epsilon_fig = crystal.plot_epsilon()
         epsilon_fig.update_layout(width=700, height=700)
         for i, polarization in enumerate(crystal.freqs):
             color = colors[i % len(colors)]
-            bands_fig = crystal.plot_bands_interactive(polarization=polarization, color=color, fig=bands_fig)
+            bands_fig = crystal.plot_bands(polarization=polarization, color=color, fig=bands_fig)
         bands_fig.update_layout(width=700, height=700)
     elif isinstance(crystal, CrystalSlab):
-        epsilon_fig = crystal_active.plot_epsilon_interactive(opacity=0.2, 
+        epsilon_fig = crystal_active.plot_epsilon(opacity=0.2, 
                                                               colorscale='matter', 
                                                               override_resolution_with=-1,
                                                               periods=configuration_active["periods_for_epsilon_plot"])
         epsilon_fig.update_layout(width=700, height=700)
         for i, polarization in enumerate(crystal.freqs):
             color = colors[i % len(colors)]
-            bands_fig = crystal.plot_bands_interactive(polarization=polarization, color=color, fig=bands_fig)
+            bands_fig = crystal.plot_bands(polarization=polarization, color=color, fig=bands_fig)
         bands_fig.update_layout(width=700, height=700)
     else:
         empty_fig = go.Figure().update_layout(title="Invalid crystal type selected.", width=700, height=700)
@@ -524,7 +660,6 @@ def run_simulation(crystal):
 def show_dielectric(n_clicks, epsilon_fig, previous_message):
     if n_clicks is None:
         return dash.no_update, previous_message + "\nShow Dielectric button not clicked."
-
     epsilon_fig, msg = plot_epsilon(epsilon_fig)
     return epsilon_fig, previous_message + "\n" + msg
 
@@ -533,8 +668,7 @@ def show_dielectric(n_clicks, epsilon_fig, previous_message):
 @app.callback(
     [Output('epsilon-graph', 'figure', allow_duplicate=True),
      Output('bands-graph', 'figure', allow_duplicate=True),
-     Output('message-box', 'value', allow_duplicate=True),
-     Output('polarization-group-dropdown', 'options')],
+     Output('message-box', 'value', allow_duplicate=True),],
     Input('run-simulation-button', 'n_clicks'),
     State('epsilon-graph', 'figure'),
     State('bands-graph', 'figure'),
@@ -542,71 +676,57 @@ def show_dielectric(n_clicks, epsilon_fig, previous_message):
     prevent_initial_call=True
 )
 def run_simulation_callback(n_clicks, epsilon_fig, bands_fig, previous_message):
-    global crystal_active, active_modes_groups
+    global crystal_active
 
     if n_clicks is None:
         return dash.no_update, dash.no_update, previous_message + "\nRun Simulation button not clicked.", dash.no_update
 
     epsilon_fig, bands_fig, msg = run_simulation(crystal_active)
-    
-    # Group the modes by polarization
-    active_modes_groups = crystal_active.group_modes()
 
-    # Update polarization selector options
-    polarization_options = [{'label': polarization, 'value': polarization} for polarization in active_modes_groups.keys()]
-    return epsilon_fig, bands_fig, previous_message + "\n" + msg + f"\nHas the simulation been run yet? {crystal_active.has_been_run}.", polarization_options
+    
+    return epsilon_fig, bands_fig, previous_message + "\n" + msg + f"\nHas the simulation been run yet? {crystal_active.has_been_run}."
 
 # Callback to update the field plots when the bands plot is clicked
 @app.callback(
-    [Output('te-field-graph', 'figure', allow_duplicate=True),
-     Output('tm-field-graph', 'figure', allow_duplicate=True),
+    [Output('e-field-graph', 'figure', allow_duplicate=True),
+     Output('h-field-graph', 'figure', allow_duplicate=True),
      Output('message-box', 'value', allow_duplicate=True)],
     Input('bands-graph', 'clickData'),
-    State('te-field-graph', 'figure'),
-    State('tm-field-graph', 'figure'),
+    State('e-field-graph', 'figure'),
+    State('h-field-graph', 'figure'),
+    State('frequency-tolerance-input', 'value'),
+    State('operation-dropdown', 'value'),
+    State('field-periods-to-plot-input', 'value'),
     State('message-box', 'value'),
     prevent_initial_call=True
 )
-def update_field_plots(clickData, te_field_fig, tm_field_fig, previous_message):
+def update_field_plots(clickData, e_field_fig, h_field_fig, frequency_tolerance, operation, periods, previous_message):
     if clickData is None:
-        return te_field_fig, tm_field_fig, previous_message + "\nNo point selected in the bands plot."
-
+        return e_field_fig, h_field_fig, previous_message + "\nNo point selected in the bands plot."
     global crystal_active
 
     if crystal_active is None:
-        return te_field_fig, tm_field_fig, previous_message + "\nNo active crystal for field plotting."
+        return e_field_fig, h_field_fig, previous_message + "\nNo active crystal for field plotting."
 
     if  crystal_active.has_been_run is False:
-        return te_field_fig, tm_field_fig, previous_message + "\nSimulation not yet run. Please run the simulation first."
+        return e_field_fig, h_field_fig, previous_message + "\nSimulation not yet run. Please run the simulation first."
     
     
     # Extract the selected k-point data from the clicked bands plot
-    kx, ky, kz, f = clickData['points'][0]['customdata']
+    kx, ky, kz, freq, polarization = clickData['points'][0]['customdata']
     k_point = mp.Vector3(kx, ky, kz)
 
-    # Generate the TE and TM field plots
-    print(f"calculating fields at k-point: {kx:.3f}, {ky:.3f}, {kz:.3f}")
-    runner_titles = {
-        'run_te': 'TE Field',
-        'run_tm': 'TM Field',
-        'run_zeven': 'TE-like Field',
-        'run_zodd': 'TM-like Field'
-    }
-    
-    te_title = runner_titles[configuration_active["runner_1"]]
-    tm_title = runner_titles[configuration_active["runner_2"]]
-    te_field_fig = crystal_active.plot_field_interactive(runner=configuration_active["runner_1"], 
-                                                         k_point=k_point,  
-                                                         title=te_title,
-                                                         periods = configuration_active["periods_for_field_plot"])
-    tm_field_fig = crystal_active.plot_field_interactive(runner=configuration_active["runner_2"], 
-                                                         k_point=k_point,  
-                                                         title=tm_title,
-                                                         periods = configuration_active["periods_for_field_plot"])
+    e_field_fig, h_field_fig = crystal_active.plot_field_components(polarization, k_point, freq, 
+                                                       frequency_tolerance=frequency_tolerance, 
+                                                       k_point_max_distance=None, 
+                                                       quantity=operation, 
+                                                       periods=periods)
 
-    new_message = previous_message + f"\nFields plotted for k-point ({kx:.3f}, {ky:.3f}, {kz:.3f})."
+    e_field_fig.update_layout(width=1400, height=700)
+    h_field_fig.update_layout(width=1400, height=700)
+    new_message = previous_message + f"\nFields plotted for k-point ({kx:.3f}, {ky:.3f}, {kz:.3f}) and frequency {freq:0.4f}."
     
-    return te_field_fig, tm_field_fig, new_message
+    return e_field_fig, h_field_fig, new_message
 
 
 # Callback to toggle the visibility of advanced material configuration
@@ -631,264 +751,32 @@ def toggle_advanced_configuration(is_advanced):
 
     return material_configuration_elements_list
 
-# Callback to select the polarization and update the k-point dropdown menu
+
+# Callback to sweep the geometry parameters
 @app.callback(
-    Output('k-point-group-dropdown', 'options'),
-    Input('polarization-group-dropdown', 'value'),
-    prevent_initial_call=True
-)
-def select_polarization_group(selected_polarization):
-    global active_modes_groups, crystal_active
-
-    if selected_polarization is None or crystal_active is None:
-        return []
-
-    # Extract the selected polarization group
-    polarization_group = active_modes_groups.get(selected_polarization)
-
-    if polarization_group is None:
-        return []
-
-    # Extract keys from the grouped modes
-    k_points = polarization_group.keys()
-
-    # Create options for the k-point dropdown
-    k_point_options = [{'label': f'({k_point[0]:0.2f}, {k_point[1]:0.2f}, {k_point[2]: .2f})',
-                         'value': str(k_point)} for k_point in k_points]
-
-    return k_point_options
-
-
-# Callback to select the k-point and update the frequency dropdown menu
-@app.callback(
-    Output('frequency-group-dropdown', 'options'),
-    [Input('polarization-group-dropdown', 'value'),
-     Input('k-point-group-dropdown', 'value')],
-    prevent_initial_call=True
-)
-def select_k_point_group(selected_polarization, selected_k_point):
-    global active_modes_groups, crystal_active
-
-    if selected_polarization is None or selected_k_point is None or crystal_active is None:
-        return []
-
-    # Convert the selected k-point string back to a tuple
-    kx, ky, kz = map(float, selected_k_point.strip('()').split(','))
-    k_point = (kx, ky, kz)
-
-    # Extract the selected polarization group
-    selected_group = active_modes_groups.get(selected_polarization).get(k_point)
-
-    
-    if selected_group is None:
-        return []
-
-    # Extract keys from the grouped modes
-    keys = selected_group.keys()
-
-    # Create options for the frequency dropdown
-    frequency_options = [{'label': key, 'value': key} for key in keys]
-
-    return frequency_options
-
-
-# Callback to select a frequency group and update the mode dropdown
-@app.callback(
-    Output('mode-selector-dropdown', 'options'),
-    [Input('polarization-group-dropdown', 'value'),
-     Input('k-point-group-dropdown', 'value'),
-     Input('frequency-group-dropdown', 'value')],
-    prevent_initial_call=True
-)
-def select_frequency_group(selected_polarization, selected_k_point, selected_frequency):
-    global active_modes_groups, crystal_active
-
-    if active_modes_groups is None or crystal_active is None:
-        return []
-    
-    if selected_polarization is None or selected_k_point is None or selected_frequency is None:
-        return []
-    
-    # Convert the selected k-point string back to a tuple
-    kx, ky, kz = map(float, selected_k_point.strip('()').split(','))
-    k_point = (kx, ky, kz)
-
-
-    # Extract the selected frequency group
-    selected_modes = active_modes_groups.get(selected_polarization).get(k_point).get(selected_frequency)
-
-    if selected_modes is None:
-        return []
-
-    # Create options for the mode dropdown
-    mode_options = [{'label': f"Mode {i + 1} with f: {selected_modes[i]['freq']:.6f} and p:{selected_modes[i]['polarization']}", 
-                     'value': i} for i in range(len(selected_modes))]
-
-    return mode_options
-
-
-# Callback to sum the vectorial fields of the selected frequency group and plot the result
-@app.callback(
-    [Output('vectorial-e-field-graph', 'figure', allow_duplicate=True),
-    Output('vectorial-h-field-graph', 'figure', allow_duplicate=True),
+    [Output('sweep-result-graph', 'figure', allow_duplicate=True),
     Output('message-box', 'value', allow_duplicate=True)],
-    Input('sum-and-plot-vectorial-field-button', 'n_clicks'),
-    [State('polarization-group-dropdown', 'value'),
-     State('k-point-group-dropdown', 'value'),
-     State('frequency-group-dropdown', 'value'),
-     State('message-box', 'value')],
-    prevent_initial_call=True
-)   
-def sum_and_plot_frequency_group(n_clicks, selected_polarization, selected_k_point, selected_frequency, previous_message):  
-    global active_modes_groups, crystal_active
-
-    if n_clicks is None:
-        return dash.no_update, dash.no_update, previous_message + "\nSum and Plot Vectorial Field button not clicked."
-
-    if active_modes_groups is None or crystal_active is None:
-        return dash.no_update, dash.no_update, previous_message + "\nNo active modes or crystal to plot vectorial field."
-
-    if selected_polarization is None or selected_k_point is None or selected_frequency is None:
-        return dash.no_update, dash.no_update, previous_message + "\nPlease select polarization, k-point, and frequency."
-
-    # Convert the selected k-point string back to a tuple
-    kx, ky, kz = map(float, selected_k_point.strip('()').split(','))
-    k_point = (kx, ky, kz)
-
-    # Extract the selected mode
-    selected_modes = active_modes_groups.get(selected_polarization).get(k_point).get(selected_frequency)
-
-    # Sum the vectorial fields of the selected modes
-    fig_e, fig_h= crystal_active.plot_modes_vectorial_fields_summed(selected_modes, sizemode="absolute")
-    fig_e.update_layout(width=700, height=700)
-    fig_h.update_layout(width=700, height=700)
-
-    new_message = previous_message + f"\nVectorial fields summed for frequency group (f: {selected_frequency}) at k-point ({kx:.3f}, {ky:.3f}, {kz:.3f}). Fields Summed"
-    return fig_e, fig_h, new_message
-
-
-# Callback to plot the vectorial fields of the selected frequency group without summing
-@app.callback(
-    [Output('vectorial-e-field-graph', 'figure', allow_duplicate=True),
-    Output('vectorial-h-field-graph', 'figure', allow_duplicate=True),
-    Output('message-box', 'value', allow_duplicate=True)],
-    Input('plot-vectorial-field-button', 'n_clicks'),
-    [State('polarization-group-dropdown', 'value'),
-     State('k-point-group-dropdown', 'value'),
-     State('frequency-group-dropdown', 'value'),
-     State('message-box', 'value')],
+    Input('run-sweep-button', 'n_clicks'),
+    State('sweep-parameter-dropdown', 'value'),
+    State('sweep-range-start-input', 'value'),
+    State('sweep-range-end-input', 'value'),
+    State('sweep-steps-input', 'value'),
+    State('message-box', 'value'),
     prevent_initial_call=True
 )
-
-def plot_frequency_group(n_clicks, selected_polarization, selected_k_point, selected_frequency, previous_message):
-    global active_modes_groups, crystal_active
-
+def run_sweep(n_clicks, sweep_parameter, start, end, steps, previous_message):
+    print("running sweep")
+    global crystal_active, configuration_active
     if n_clicks is None:
-        return dash.no_update, dash.no_update, previous_message + "\nPlot Vectorial Field button not clicked."
+        return dash.no_update
 
-    if active_modes_groups is None or crystal_active is None:
-        return dash.no_update, dash.no_update, previous_message + "\nNo active modes or crystal to plot vectorial field."
+    print("...")
+    sweep_values = np.linspace(start, end, steps)
+    sweep_results = crystal_active.sweep_geometry_parameter(sweep_parameter, sweep_values, crystal_active.num_bands)
+    fig = crystal_active.plot_sweep_result(sweep_results)
+    msg = f"Sweep results plotted for parameter {sweep_parameter}.\n"
 
-    if selected_polarization is None or selected_k_point is None or selected_frequency is None:
-        return dash.no_update, dash.no_update, previous_message + "\nPlease select polarization, k-point, and frequency."
+    return fig, previous_message + msg
 
-    # Convert the selected k-point string back to a tuple
-    kx, ky, kz = map(float, selected_k_point.strip('()').split(','))
-    k_point = (kx, ky, kz)
-
-    # Extract the selected mode
-    selected_modes = active_modes_groups.get(selected_polarization).get(k_point).get(selected_frequency)
-
-    # Plot the vectorial fields of the selected modes
-    fig_e, fig_h = crystal_active.plot_modes_vectorial_fields(selected_modes)
-    fig_e.update_layout(width=700, height=700)
-    fig_h.update_layout(width=700, height=700)
-
-    new_message = previous_message + f"\nVectorial fields plotted for frequency group (f: {selected_frequency}) at k-point ({kx:.3f}, {ky:.3f}, {kz:.3f})."
-    return fig_e, fig_h, new_message
-
-
-# Callback to plot the vectorial fields of the selected mode
-@app.callback(
-    [Output('vectorial-e-field-graph', 'figure', allow_duplicate=True),
-    Output('vectorial-h-field-graph', 'figure', allow_duplicate=True),
-    Output('message-box', 'value', allow_duplicate=True)],
-    Input('plot-selected-vectorial-field-button', 'n_clicks'),
-    [State('polarization-group-dropdown', 'value'),
-     State('k-point-group-dropdown', 'value'),
-     State('frequency-group-dropdown', 'value'),
-     State('mode-selector-dropdown', 'value'),
-     State('message-box', 'value')],
-    prevent_initial_call=True
-)
-def plot_selected_mode(n_clicks, selected_polarization, selected_k_point, selected_frequency, selected_mode, previous_message):
-    global active_modes_groups, crystal_active
-
-    if n_clicks is None:
-        return dash.no_update, dash.no_update, previous_message + "\nPlot Selected Vectorial Field button not clicked."
-
-    if active_modes_groups is None or crystal_active is None:
-        return dash.no_update, dash.no_update, previous_message + "\nNo active modes or crystal to plot vectorial field."
-
-    if selected_polarization is None or selected_k_point is None or selected_frequency is None or selected_mode is None:
-        return dash.no_update, dash.no_update, previous_message + "\nPlease select polarization, k-point, frequency, and mode."
-
-    # Convert the selected k-point string back to a tuple
-    kx, ky, kz = map(float, selected_k_point.strip('()').split(','))
-    k_point = (kx, ky, kz)
-
-    # Extract the selected mode
-    selected_modes = active_modes_groups.get(selected_polarization).get(k_point).get(selected_frequency)[selected_mode]
-
-    # Plot the vectorial fields of the selected mode
-    fig_e, fig_h = crystal_active.plot_modes_vectorial_fields([selected_modes])
-    fig_e.update_layout(width=700, height=700)
-    fig_h.update_layout(width=700, height=700)
-
-    new_message = previous_message + f"\nVectorial fields plotted for selected mode in frequency group (f: {selected_frequency}) at k-point ({kx:.3f}, {ky:.3f}, {kz:.3f}) ."
-    return fig_e, fig_h, new_message
-
-
-# Callback to plot the effective parameters from the selected frequency group
-@app.callback(
-    [Output('effective-param-plot', 'figure', allow_duplicate=True),
-     Output('message-box', 'value', allow_duplicate=True)],
-    Input('plot-effective-param-button', 'n_clicks'),
-    [State('polarization-group-dropdown', 'value'),
-     State('k-point-group-dropdown', 'value'),
-     State('frequency-group-dropdown', 'value'),
-     State('message-box', 'value')],
-    prevent_initial_call=True
-)
-def plot_effective_parameters(n_clicks, selected_polarization, selected_k_point, selected_frequency, previous_message):
-    global active_modes_groups, crystal_active
-
-    if n_clicks is None:
-        return dash.no_update, previous_message + "\nPlot Effective Parameters button not clicked."
-
-    if active_modes_groups is None or crystal_active is None:
-        return dash.no_update, previous_message + "\nNo active modes or crystal to plot effective parameters."
-
-    if selected_polarization is None or selected_k_point is None or selected_frequency is None:
-        return dash.no_update, previous_message + "\nPlease select polarization, k-point, and frequency."
-
-    # Convert the selected k-point string back to a tuple
-    kx, ky, kz = map(float, selected_k_point.strip('()').split(','))
-    k_point = (kx, ky, kz)
-
-    # Extract the selected mode
-    selected_modes = active_modes_groups.get(selected_polarization).get(k_point).get(selected_frequency)
-
-    # Plot the effective parameters of the selected modes
-    eff = crystal_active.calculate_effective_parameters(selected_modes)
-    print(eff)
-    fig = crystal_active.plot_effective_parameters(eff)
-    fig.update_layout(width=700, height=700)
-
-    new_message = previous_message + f"\nEffective parameters plotted for frequency group (f: {selected_frequency}) at k-point ({kx:.3f}, {ky:.3f}, {kz:.3f})."
-    return fig, new_message
-
-
-if __name__ == '__main__':
     #%%
-    app.run(debug=True)
+app.run(debug=True)
