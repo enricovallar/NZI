@@ -18,7 +18,7 @@ class Crystal_Geometry:
             "geometry_type": geometry_type,
         }
         self.kwargs = {}
-        self.arguments = self.required_arguments | self.kwargs
+        self.arguments = {**self.required_arguments, **self.kwargs}
         self.material = material
         self.geometry =[]
         self.base_geometry = self.geometry
@@ -102,7 +102,7 @@ class Crystal2D_Geometry(Crystal_Geometry):
             "geometry_type": geometry_type,
         }
         self.kwargs = kwargs
-        self.arguments = self.required_arguments | self.kwargs
+        self.arguments = {**self.required_arguments, **self.kwargs}
         
         self.geometry = []
         #bulk
@@ -247,7 +247,7 @@ class CrystalSlab_Geometry(Crystal_Geometry):
             "height_supercell": height_supercell,
         }
         self.kwargs = kwargs
-        self.arguments = self.required_arguments | self.kwargs
+        self.arguments = {**self.required_arguments, **self.kwargs}
 
         self.height_slab = height_slab
         self.height_supercell = height_supercell

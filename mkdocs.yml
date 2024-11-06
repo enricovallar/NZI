@@ -1,6 +1,10 @@
 site_name: My Docs
 theme:
   name: 'material'
+  features:
+    content:
+      math: true
+      copycode: trues
 
 plugins:
   - search
@@ -15,6 +19,8 @@ nav:
   - Home: index.md
   - API Reference:
       - Photonic Crystal: photonic_crystal.md
+  - Installation: installation.md
+
 
 
 watch: 

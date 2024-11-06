@@ -22,23 +22,25 @@ class PhotonicCrystal:
     A class to represent a photonic crystal and perform simulations using MPB (MIT Photonic Bands).
     
     Attributes:
-        lattice_type (str): The type of lattice (e.g., 'square', 'triangular').
-        num_bands (int): The number of bands to calculate.
-        resolution (tuple[int, int] | int): The resolution of the simulation.
-        interp (int): The interpolation factor for k-points.
-        periods (int): The number of periods for the simulation.
-        k_points (list): The list of k-points for the simulation.
-        use_XY (bool): Whether to use X and Y directions for the x-axis in plots.
-        geometry_lattice (mp.Lattice): The lattice geometry.
-        k_points_interpolated (list): The interpolated k-points.
-        basic_geometry (list): The basic geometry of the photonic crystal.
-        ms (mpb.ModeSolver): The mode solver for the simulation.
-        md (mpb.MPBData): The MPB data object.
-        freqs (dict): The calculated frequencies for different polarizations.
-        gaps (dict): The calculated band gaps for different polarizations.
-        epsilon (np.ndarray): The dielectric constant distribution.
-        modes (list): The list of calculated modes.
-        has_been_run (bool): Whether the simulation has been run.
+        lattice_type (str): Type of the lattice.
+        num_bands (int): Number of bands.
+        resolution (tuple[int, int] | int): Resolution of the simulation.
+        interp (int): Interpolation factor for k-points.
+        periods (int): Number of periods.
+        pickle_id (str): Identifier for pickling.
+        has_been_run (bool): Flag indicating if the simulation has been run.
+        geometry_lattice (None): Geometry lattice, set with basic lattice method.
+        k_points (list): List of k-points.
+        k_points_interpolated (list): Interpolated k-points.
+        material (Crystal_Materials): Material of the photonic crystal.
+        geometry (Crystal_Geometry): Geometry of the photonic crystal.
+        ms (None): Placeholder for ms attribute.
+        md (None): Placeholder for md attribute.
+        freqs (dict): Dictionary to store frequencies.
+        gaps (dict): Dictionary to store gaps.
+        epsilon (None): Placeholder for epsilon attribute.
+        modes (list): List to store modes.
+        use_XY (bool): Flag to use XY plane.
     
     Methods:
         __getstate__(): Get the state for pickling.
@@ -75,7 +77,7 @@ class PhotonicCrystal:
                 material: Crystal_Materials = None,
                 geometry: Crystal_Geometry = None, 
                 num_bands: int = 6,
-                resolution: tuple[int, int] | int = 32,
+                resolution = 32,
                 interp: int = 4,
                 periods: int = 3, 
                 pickle_id = None, 
@@ -315,7 +317,7 @@ class PhotonicCrystal:
         ms = self.ms
         return ms
     
-    def convert_mode_fields(self, mode, periods=1)-> tuple[mpb.MPBArray, mpb.MPBArray]:
+    def convert_mode_fields(self, mode, periods=1)-> tuple:
         """
         Convert the mode fields to arrays for visualization.
         Apparently this is necessary to visualize the fields if crystal is restored from pickle.
@@ -341,7 +343,7 @@ class PhotonicCrystal:
         
 
 
-    def extract_data(self, periods: int | None = 5):
+    def extract_data(self, periods = 5):
         """
         Extract the data from the simulation.
 
@@ -566,7 +568,7 @@ class PhotonicCrystal:
         component: int = 2,
         quantity: str = "real",
         colorscale: str = "RdBu",
-    )->tuple[go.Figure, go.Figure]: 
+    ): 
         """
         Plot the field visualization.
         Not implemented in the base class. Must be implemented in the derived class.
@@ -599,7 +601,7 @@ class PhotonicCrystal:
             periods: int = 1,
             quantity: str = "real",
             colorscale: str = 'RdBu',
-            )-> tuple[go.Figure, go.Figure]:
+            ):
         
         """
         Plot the field visualization.
@@ -1154,7 +1156,7 @@ class Crystal2D(PhotonicCrystal):
     def __init__(self,
                 lattice_type = "square",
                 num_bands: int = 6,
-                resolution: tuple[int, int] | int = 32,
+                resolution = 32,
                 interp: int =4,
                 periods: int =3, 
                 pickle_id = None,
@@ -1246,7 +1248,7 @@ class Crystal2D(PhotonicCrystal):
                 component: int = 2,
                 quantity: str = "real",
                 colorscale: str = "RdBu",
-    )-> tuple[go.Figure, go.Figure]:
+    )-> tuple:
         """
         Plot the electromagnetic field distribution using Plotly.
 
@@ -1625,7 +1627,7 @@ class Crystal2D(PhotonicCrystal):
     
     
     @staticmethod
-    def basic_lattice(lattice_type='square')-> tuple[mp.Lattice, list[mp.Vector3]]:
+    def basic_lattice(lattice_type='square')-> tuple:
         """
         Define the basic lattice of the photonic crystal.
 
@@ -1645,7 +1647,7 @@ class Crystal2D(PhotonicCrystal):
 
 
     @staticmethod
-    def square_lattice()-> tuple[mp.Lattice, list[mp.Vector3]]:
+    def square_lattice()-> tuple:
         """
         Define the square lattice for the photonic crystal.
 
@@ -1665,7 +1667,7 @@ class Crystal2D(PhotonicCrystal):
     
 
     @staticmethod
-    def triangular_lattice()-> tuple[mp.Lattice, list[mp.Vector3]]:
+    def triangular_lattice()-> tuple:
         """
         Define the triangular lattice for the photonic crystal.
 
@@ -1777,7 +1779,7 @@ class CrystalSlab(PhotonicCrystal):
                     fig=None, 
                     opacity=0.3, 
                     colorscale='PuBuGn', 
-                    override_resolution_with: None|int= None, 
+                    override_resolution_with = None, 
                     periods = 1,
                     )-> go.Figure:
         """
@@ -1858,7 +1860,7 @@ class CrystalSlab(PhotonicCrystal):
         return fig
 
     @staticmethod
-    def basic_lattice(lattice_type='square', height_supercell=4)-> tuple[mp.Lattice, list[mp.Vector3]]:
+    def basic_lattice(lattice_type='square', height_supercell=4)-> tuple:
         """
         Define the basic lattice structure for the photonic crystal.
 
@@ -1878,7 +1880,7 @@ class CrystalSlab(PhotonicCrystal):
             raise ValueError("Invalid lattice type. Choose 'square' or 'triangular'.")
         
     @staticmethod
-    def square_lattice(height_supercell=4)-> tuple[mp.Lattice, list[mp.Vector3]]:
+    def square_lattice(height_supercell=4)-> tuple:
         """
         Define the square lattice for the photonic crystal.
 
@@ -1897,7 +1899,7 @@ class CrystalSlab(PhotonicCrystal):
         return lattice, k_points
 
     @staticmethod
-    def triangular_lattice(height_supercell=4)-> tuple[mp.Lattice, list[mp.Vector3]]:
+    def triangular_lattice(height_supercell=4)-> tuple:
         """
         Define the triangular lattice for the photonic crystal.
 
