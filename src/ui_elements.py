@@ -63,7 +63,18 @@ default_values = {
     'E_chi3_diag': (0, 0, 0),
     'periods_for_epsilon_plot': 3,
     'periods_for_field_plot': 5,
-    'k_point_max': 0.01,
+    'k_point_max': 0.5,
+    'cell_geometry': 'circular',
+    'a': 0.2,
+    'b': 0.5,
+    'edge_length': 0.35,
+
+    # Sweep configuration
+    'sweep_parameter': 'r',
+    'sweep_range_start': 0.1,
+    'sweep_range_end': 1.0,
+    'sweep_steps': 10,
+
 }
 
 geometry_default_values = {
@@ -73,6 +84,10 @@ geometry_default_values = {
     'radius': default_values['radius'],
     'height_slab': default_values['height_slab'],
     'height_supercell': default_values['height_supercell'],
+    'cell_geometry': default_values['cell_geometry'],
+    'a': default_values['a'],
+    'b': default_values['b'],
+    'edge_length': default_values['edge_length'],
 }
 
 material_default_values = {
@@ -99,11 +114,21 @@ solver_default_values = {
 }
 
 
+sweep_default_values = {
+    'sweep_parameter': default_values['sweep_parameter'],
+    'sweep_range_start': default_values['sweep_range_start'],
+    'sweep_range_end': default_values['sweep_range_end'],  
+    'sweep_steps': default_values['sweep_steps'],   
+}
 
 
 
 
 
+
+#_______________________________________________________________
+#  Geometry configuration elements
+#_______________________________________________________________
 
 
 crystal_type_dropdown = UI_element('crystal-type-dropdown', parameter_id='crystal_type')
@@ -152,20 +177,52 @@ lattice_type_dropdown.element = dbc.Row(
 )
 
 radius_input = UI_element('radius-input', parameter_id='radius')
-radius_input.element = dbc.Row(
+radius_input.element =  dbc.Row(
     [
         dbc.Col(html.Label("Radius"), width=4),
-        dbc.Col(dcc.Input(id=radius_input.id, type='number', value=default_values['radius'], step=0.01), width=8),
+        dbc.Col(dcc.Input(id=radius_input.id, type='number', value=default_values['radius'], step=0.0001), width=8),
     ],
     style={'padding': '10px', "display": "flex"},
     id=radius_input.container_id
 )
 
+
+a_input = UI_element('a-input', parameter_id='a')
+a_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Axis A"), width=4),
+        dbc.Col(dcc.Input(id=a_input.id, type='number', value=default_values['a'], step=0.0001), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=a_input.container_id
+)
+
+b_input = UI_element('b-input', parameter_id='b')
+b_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Axis B"), width=4),
+        dbc.Col(dcc.Input(id=b_input.id, type='number', value=default_values['b'], step=0.0001), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=b_input.container_id
+)
+
+edge_length_input = UI_element('edge-length-input', parameter_id='edge_length')
+edge_length_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Edge Length"), width=4),
+        dbc.Col(dcc.Input(id=edge_length_input.id, type='number', value=default_values['edge_length'], step=0.0001), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=edge_length_input.container_id
+)
+
+
 height_slab_input = UI_element('height-slab-input', parameter_id='height_slab')
 height_slab_input.element = dbc.Row(
     [
         dbc.Col(html.Label("Height (Slab)"), width=4),
-        dbc.Col(dcc.Input(id=height_slab_input.id, type='number', value=default_values['height_slab'], step=0.01), width=8),
+        dbc.Col(dcc.Input(id=height_slab_input.id, type='number', value=default_values['height_slab'], step=0.0001), width=8),
     ],
     style={'padding': '10px', "display": "flex"},
     id=height_slab_input.container_id
@@ -175,11 +232,31 @@ height_supercell_input = UI_element('height-supercell-input', parameter_id='heig
 height_supercell_input.element = dbc.Row(
     [
         dbc.Col(html.Label("Height (Supercell)"), width=4),
-        dbc.Col(dcc.Input(id=height_supercell_input.id, type='number', value=default_values['height_supercell'], step=0.1), width=8),
+        dbc.Col(dcc.Input(id=height_supercell_input.id, type='number', value=default_values['height_supercell'], step=0.0001), width=8),
     ],
     style={'padding': '10px', "display": "flex"},
     id=height_supercell_input.container_id
 )
+
+cell_geometry_dropdown = UI_element('cell-geometry-dropdown', parameter_id='cell_geometry')
+cell_geometry_dropdown.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Select Cell Geometry"), width=4),
+        dbc.Col(dcc.Dropdown(
+            id=cell_geometry_dropdown.id,
+            options=[
+                {'label': 'Circular', 'value': 'circular'},
+                {'label': 'Square', 'value': 'square'},
+                {'label': 'Elliptical', 'value': 'elliptical'},
+                {'label': 'Rectangular', 'value': 'rectangular'},
+            ],
+            value=default_values.get('cell_geometry', 'circular'),  # Default to circular
+        ), width=8),
+    ],
+    style={'padding': '10px', "display": "flex"},
+    id=cell_geometry_dropdown.container_id
+)
+
 
 
 geometry_configuration_elements = {}
@@ -187,7 +264,11 @@ geometry_configuration_elements = {
     crystal_type_dropdown.id: crystal_type_dropdown,
     crystal_id_input.id: crystal_id_input,
     lattice_type_dropdown.id: lattice_type_dropdown,
+    cell_geometry_dropdown.id: cell_geometry_dropdown,
     radius_input.id: radius_input,
+    a_input.id: a_input,
+    b_input.id: b_input,
+    edge_length_input.id: edge_length_input,
     height_slab_input.id: height_slab_input,
     height_supercell_input.id: height_supercell_input,
 }
@@ -233,7 +314,7 @@ epsilon_background_input.element = dbc.Row(
 epsilon_diag_input = UI_element('epsilon-diag-input', parameter_id='epsilon_diag')
 epsilon_diag_input.element = dbc.Row(
     [
-        dbc.Col(html.Label("Epsilon (Diagonal)"), width=4),
+        dbc.Col(html.Label("epsilon_diag"), width=4),
         dbc.Col(dcc.Input(id=epsilon_diag_input.id, type='text', value=str(default_values['epsilon_diag']), placeholder='Enter epsilon diagonal as (xx, yy, zz)'), width=8),
     ],
     style={'padding': '10px', "display": "flex"},
@@ -243,7 +324,7 @@ epsilon_diag_input.element = dbc.Row(
 epsilon_offdiag_input = UI_element('epsilon-offdiag-input', parameter_id='epsilon_offdiag')
 epsilon_offdiag_input.element = dbc.Row(
     [
-        dbc.Col(html.Label("Epsilon (Off-Diagonal)"), width=4),
+        dbc.Col(html.Label("epsilon_offdiag"), width=4),
         dbc.Col(dcc.Input(id=epsilon_offdiag_input.id, type='text', value=str(default_values['epsilon_offdiag']), placeholder='Enter epsilon off-diagonal as (xy, yz, zx)'), width=8),
     ],
     style={'padding': '10px', "display": "flex"},
@@ -254,7 +335,7 @@ epsilon_offdiag_input.element = dbc.Row(
 E_chi2_diag_input = UI_element('E-chi2-diag-input', parameter_id='E_chi2_diag')
 E_chi2_diag_input.element = dbc.Row(
     [
-        dbc.Col(html.Label("E (Chi2 Diagonal)"), width=4),
+        dbc.Col(html.Label("E_chi2_diag"), width=4),
         dbc.Col(dcc.Input(id=E_chi2_diag_input.id, type='text', value=str(default_values.get('E_chi2_diag', '')), placeholder='Enter E chi2 diagonal as (xx, yy, zz)'), width=8),
     ],
     style={'padding': '10px', "display": "flex"},
@@ -267,7 +348,7 @@ E_chi2_diag_input.element = dbc.Row(
 E_chi3_diag_input = UI_element('E-chi3-diag-input', parameter_id='E_chi3_diag')
 E_chi3_diag_input.element = dbc.Row(
     [
-        dbc.Col(html.Label("E (Chi3 Diagonal)"), width=4),
+        dbc.Col(html.Label("E_chi3_diag"), width=4),
         dbc.Col(dcc.Input(id=E_chi3_diag_input.id, type='text', value=str(default_values.get('E_chi3_diag', '')), placeholder='Enter E chi3 diagonal as (xx, yy, zz)'), width=8),
     ],
     style={'padding': '10px', "display": "flex"},
@@ -437,6 +518,107 @@ solver_configuration_elements = {
 solver_configuration_elements_list = dict_to_elements_list(solver_configuration_elements)
 
 
+
+#_______________________________________________________________
+#  Sweep configuration elements
+#_______________________________________________________________
+
+sweep_parameter_dropdown = UI_element('sweep-parameter-dropdown', parameter_id='sweep_parameter')
+sweep_parameter_dropdown.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Sweep Parameter"), width=4),
+        dbc.Col(dcc.Dropdown(
+            id=sweep_parameter_dropdown.id,
+            options=[
+                {'label': 'Radius - circular atom only', 'value': 'r'},
+                {'label': 'Edge Length - square atom only', 'value': 'a'},
+                {'label': 'Axis A - elliptical or rectangular atom only', 'value': 'a'},
+                {'label': 'Axis B - elliptical or rectangular atom only', 'value': 'b'},
+                {'label': 'Height Slab - slab only', 'value': 'height_slab'},
+                {'label': 'Height Supercell - slab only', 'value': 'height_supercell'},
+            ],
+            value='radius'
+        ), width=8),
+    ],
+    className="mt-3",
+    style={'padding': '10px', "display": "flex"},
+    id=sweep_parameter_dropdown.container_id
+)
+
+sweep_range_start_input = UI_element('sweep-range-start-input', parameter_id='sweep_range_start')
+sweep_range_start_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Sweep Range Start"), width=4),
+        dbc.Col(dcc.Input(
+            id=sweep_range_start_input.id,
+            type='number',
+            value=0.1,
+            step=0.00001,
+            min=0,
+            style={'width': '100%'}
+        ), width=8),
+    ],
+    className="mt-3",
+    style={'padding': '10px', "display": "flex"},
+    id=sweep_range_start_input.container_id
+)
+
+sweep_range_end_input = UI_element('sweep-range-end-input', parameter_id='sweep_range_end')
+sweep_range_end_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Sweep Range End"), width=4),
+        dbc.Col(dcc.Input(
+            id=sweep_range_end_input.id,
+            type='number',
+            value=0.5,
+            step=0.00001,
+            min=0,
+            style={'width': '100%'}
+        ), width=8),
+    ],
+    className="mt-3",
+    style={'padding': '10px', "display": "flex"},
+    id=sweep_range_end_input.container_id
+)
+
+sweep_steps_input = UI_element('sweep-steps-input', parameter_id='sweep_steps')
+sweep_steps_input.element = dbc.Row(
+    [
+        dbc.Col(html.Label("Number of Steps"), width=4),
+        dbc.Col(dcc.Input(
+            id=sweep_steps_input.id,
+            type='number',
+            value=10,
+            step=1,
+            min=1,
+            style={'width': '100%'}
+        ), width=8),
+    ],
+    className="mt-3",
+    style={'padding': '10px', "display": "flex"},
+    id=sweep_steps_input.container_id
+)
+
+run_sweep_button = UI_element('run-sweep-button', parameter_id='run_sweep')
+run_sweep_button.element = dbc.Row(
+    [
+        dbc.Col(dbc.Button("Run Sweep", id=run_sweep_button.id, color="primary", className="mr-2"), width={"size": 4}),
+        dbc.Col(width={"size": 8}),  # Blank column
+    ],
+    className="mt-3",
+    style={'padding': '10px', "display": "flex"},
+    id=run_sweep_button.container_id
+)
+
+sweep_configuration_elements = {
+    sweep_parameter_dropdown.id: sweep_parameter_dropdown,
+    sweep_range_start_input.id: sweep_range_start_input,
+    sweep_range_end_input.id: sweep_range_end_input,
+    sweep_steps_input.id: sweep_steps_input,
+    run_sweep_button.id: run_sweep_button,
+}
+
+sweep_configuration_elements_list = dict_to_elements_list(sweep_configuration_elements)
 
 #%%
 if __name__ == '__main__':
