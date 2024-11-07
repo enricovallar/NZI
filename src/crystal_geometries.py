@@ -6,6 +6,19 @@ from functools import partial
 
 class Crystal_Geometry:
 
+    """
+    Represents a crystal geometry. This class was done to better handle geometry configuaration in the Dash app. 
+
+    Attributes:
+        material (Crystal_Materials): The material of the crystal.
+        geometry (list): List of Meep geometric objects representing the crystal geometry.
+        base_geometry (list): List of Meep geometric objects representing the base crystal geometry. (bulk, substrate, background)
+        geometry_type (str): Type of geometry ('circular', 'square', 'rectangular', 'elliptical').
+        atomic_function (function): Function to add an atomic object to the geometry.
+    """
+
+
+
     GEOMETRY_TYPES = ['square', 'circular', 'rectangular', 'elliptical']
 
 
@@ -28,30 +41,100 @@ class Crystal_Geometry:
 
 
     
-    def square_atom(self, a, r):
+    def square_atom(self, a):
+        '''
+        Adds a square atom to the geometry.
+
+        Args:
+            a (float): Length of each side of the square atom.
+
+        Raises:
+            NotImplementedError: If the method is not yet implemented.
+        '''
         raise NotImplementedError("This method is not yet implemented")
         
 
     def circular_atom(self, r):
+        '''
+        Adds a circular atom to the geometry.
+
+        Args:
+            r (float): Radius of the circular atom.
+
+        Raises:
+            NotImplementedError: If the method is not yet implemented.
+        '''
         raise NotImplementedError("This method is not yet implemented")
         
     def rectangular_atom(self, a, b):
+        '''
+        Adds a rectangular atom to the geometry.
+
+        Args:
+            a (float): Width of the rectangular atom.
+            b (float): Height of the rectangular atom.
+        
+        Raises:
+            NotImplementedError: If the method is not yet implemented.
+        '''
         raise NotImplementedError("This method is not yet implemented")
     
     def elliptical_atom(self, a, b):
+        '''
+        Adds an elliptical atom to the geometry.
+
+        Args:
+            a (float): Length of the major axis.
+            b (float): Length of the minor axis.
+        
+        Raises: 
+            NotImplementedError: If the method is not yet implemented.
+        '''
         raise NotImplementedError("This method is not yet implemented")
     
     def build_geometry(self):
+        """
+        Builds the crystal geometry based on the geometry type and additional keyword arguments.
+            
+        Raises:
+            NotImplementedError: If the method is not yet implemented.
+        """
+
         raise NotImplementedError("This method is not yet implemented")
     
     def geometry_function(self, atomic_function,  **kwargs):
-        geometry = self.base_geometry
+        """
+        Adds an atomic object to the geometry.
+
+        Args:
+            atomic_function (function): Function to add an atomic object to the geometry.
+            **kwargs: Additional keyword arguments specific to the atomic object.
+        """
+
+        geometry = self.base_geometry.copy()
         geometry.append(atomic_function(**kwargs))
+        return geometry 
 
     def to_list(self):
-        return self.geometry
+        """
+        Returns the crystal geometry as a list of Meep geometric objects.
+
+        Returns:
+            list: List of Meep geometric objects representing the crystal geometry.
+        """ 
+        return self.geometry.copy()
     
     def to_partial(self, exclude_key): 
+        """
+        Returns a partial function with the specified key excluded from the arguments.
+        This is useful for sweeps.
+
+        Args:
+            exclude_key (str): Key to exclude from the arguments.
+
+        Returns:
+            partial: Partial function with the specified key excluded from the arguments.
+        """ 
         arguments = self.arguments.copy()
         arguments.pop(exclude_key)
         return partial(self.__class__, **self.arguments)
@@ -63,6 +146,10 @@ class Crystal_Geometry:
     
 
 class Crystal2D_Geometry(Crystal_Geometry):
+    """
+    Represents a 2D crystal geometry.
+    Inherits from Crystal_Geometry and adds additional layers for substrate and background.
+    """
 
     def __init__(self,
                  material: Crystal_Materials,

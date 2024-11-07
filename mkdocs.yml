@@ -2,26 +2,55 @@ site_name: My Docs
 theme:
   name: 'material'
   features:
-    content:
-      math: true
-      copycode: trues
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - toc.integrate
+    - content.code.copy
+    - search.highlight # Highlight search results
+    - search.suggest # Show search suggestions
+    - content.tabs.link # Sync tabs across pages
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences # Better code blocks
+  - pymdownx.tabbed # Content tabs
+  - pymdownx.tasklist # Task lists
+  - admonition # Add note boxes
+  - pymdownx.details # Collapsible blocks
+  - pymdownx.emoji # Emojis
+  - pymdownx.arithmatex: # Math equations
+      generic: true
+  - attr_list # Add attributes to elements
+
+extra:
+  analytics:
+    provider: google
+    property: !ENV GOOGLE_ANALYTICS_KEY
+  social:
+    - icon: fontawesome/brands/github 
+      link: https://github.com/enricovallar
+  provider: mike  # Version selector
 
 plugins:
   - search
-  - mkdocstrings:
-      handlers:
-        python:
-          options:
-            show_signature: true
-            sorting: source
+  - mkdocstrings
+  - git-revision-date-localized # Show last update date
+  - minify:
+      minify_html: true
 
-nav:
-  - Home: index.md
-  - API Reference:
-      - Photonic Crystal: photonic_crystal.md
-  - Installation: installation.md
-
-
-
-watch: 
+watch:
   - src

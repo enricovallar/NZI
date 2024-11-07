@@ -1,17 +1,23 @@
-# Welcome to MkDocs
+# Welcome in the NZI Material Finder!
+This tool leverages the MPB Python Interface, which is part of the MEEP repository, to perform simulations of 2D photonic crystals and photonic crystal slabs.
+This tool has been developed to find NZI Material realized with of PhCs. 
 
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
+It is possible to use the Dash application or directly write your code in Python using the API for further data analysis; for the latter I suggest using Jupyther Notebook. 
 
-## Commands
+The basic process flow is: 
 
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
+1. Choose the crystal type (2D or Slab)
+2. Choose the lattice type (triangular or square)
+3. Choose the materials of background, substrate,  bulk and atom
+4. Choose the geometry of the atom (circular, square, elliptical or rectangular)
+5. Set the MPB Solver
+6. Run the simulatiom 
+7. Plot the bands
+8. Investigate the field at specific band points
+9. If you want, you can sweep some geometry parameters. 
 
-## Project layout
 
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
+
+
+
+

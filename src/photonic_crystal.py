@@ -219,14 +219,16 @@ class PhotonicCrystal:
 
         Args:
             runner (str): The name of the function to run the simulation. Default is 'run_zeven'. 
+                runner must correspond to an MPB runner. For example:
+
+                - 'run_zeven': Run the simulation for even parity modes in z-axis.
+                - 'run_zodd': Run the simulation for odd parity modes in z-axis.
+                - 'run_tm': Run the simulation for transverse magnetic modes.
+                - 'run_te': Run the simulation for transverse electric modes.
+                - 'run': Do not consider symmetry.
             polarization (str, optional): The polarization of the simulation. Default is None. If None, it uses the runner name.
 
-        runner must correspond to an MPB runner. For example: \n
-        -'run_zeven': Run the simulation for even parity modes in z-axis.\n
-        -'run_zodd': Run the simulation for odd parity modes in z-axis.\n
-        -'run_tm': Run the simulation for transverse magnetic modes.\n
-        -'run_te': Run the simulation for transverse electric modes.\n
-        -'run': Do not consider symmetry.
+        
         """
         if self.ms is None:
             raise ValueError("Solver is not set. Call set_solver() before running the simulation.")
@@ -263,14 +265,16 @@ class PhotonicCrystal:
 
         Args:
             runner (str): The name of the function to run the simulation. Default is 'run_zeven'. 
+                runner must correspond to an MPB runner. For example: 
+
+                - 'run_zeven': Run the simulation for even parity modes in z-axis.
+                - 'run_zodd': Run the simulation for odd parity modes in z-axis.
+                - 'run_tm': Run the simulation for transverse magnetic modes.
+                - 'run_te': Run the simulation for transverse electric modes.
+                - 'run': Do not consider symmetry.   
+
             polarization (str, optional): The polarization of the simulation. Default is None. If None, it uses the runner name.
 
-        runner must correspond to an MPB runner. For example: \n
-        -'run_zeven': Run the simulation for even parity modes in z-axis.\n
-        -'run_zodd': Run the simulation for odd parity modes in z-axis.\n
-        -'run_tm': Run the simulation for transverse magnetic modes.\n
-        -'run_te': Run the simulation for transverse electric modes.\n
-        -'run': Do not consider symmetry.
         """
         if self.ms is None:
             raise ValueError("Solver is not set. Call set_solver() before running the simulation.")
@@ -302,8 +306,9 @@ class PhotonicCrystal:
 
     def run_dumb_simulation(self) -> mpb.ModeSolver:    
         """
-        Run a dumb simulation. 
+        Run a dumb simulation.  It is the first band of the gamma point.
         This is used to quickly extract some values from the simulation later. 
+        For example it can be used to extract epsilon values.
         """
 
         #run the simulation in the gamma point, find one mode
@@ -312,23 +317,22 @@ class PhotonicCrystal:
                                   k_points=[mp.Vector3()],
                                   resolution=self.resolution,
                                   num_bands=1)
-        
-        self.ms.run()
+        with suppress_output():
+            self.ms.run()
         ms = self.ms
         return ms
     
     def convert_mode_fields(self, mode, periods=1)-> tuple:
         """
-        Convert the mode fields to arrays for visualization.
+        Convert the mode fields to mpb.MPBArray for visualization.
         Apparently this is necessary to visualize the fields if crystal is restored from pickle.
 
         Args:
-        - mode: The mode dictionary.
-        - periods: The number of periods to extract. Default is 1.
+            mode (dict): The mode dictionary.
+            periods (int): The number of periods to extract. Default is 1.
         
         Returns:
-        - e_field_array: The electric field array for visualization.
-        - h_field_array: The magnetic field array for visualization.
+            tuple: A tuple containing the electric field array and the magnetic field array for visualization.
         """
 
         with suppress_output():
@@ -345,7 +349,7 @@ class PhotonicCrystal:
 
     def extract_data(self, periods = 5):
         """
-        Extract the data from the simulation.
+        Extract the data from the simulation. Basically it creates a MPBData object.
 
         Args:
             periods (int, optional): The number of periods to extract. Default is 5.
@@ -361,7 +365,7 @@ class PhotonicCrystal:
         return self.md
         
     
-    def plot_epsilon(self, fig=None, title='Epsilon'):
+    def plot_epsilon(self, fig=None, title='Epsilon') :
         """
         Plot the epsilon of the photonic crystal interactively using Plotly.
         Not implemented in the base class. Must be implemented in the derived class.
@@ -378,8 +382,9 @@ class PhotonicCrystal:
     def plot_bands(self, polarization="te", title='Bands', fig=None, color='blue')-> go.Figure:
         """
         Plot the bands of the photonic crystal using Plotly.
+
         This method plots the bands for the specified polarization.
-        In Dash and Jupyther Notebook, the plot is interactive and data are shown on hover.        
+        In Dash and Jupyter Notebook, the plot is interactive and data are shown on hover.
 
         Args:
             polarization (str, optional): The polarization of the bands. Default is 'te'.
@@ -973,43 +978,7 @@ class PhotonicCrystal:
         self.geometry = old_geom
         self.num_bands = old_num_bands
         return data
-    
-
-    def sweep_geometry_parameter_old(self, geom : partial, param_to_sweep: str, sweep_values: list, num_bands: int =4)-> list:
-        
-        """
-        Sweep a parameter of the geometry and run simulations for each value.
-        
-        Args:
-            geom (function): The geometry function to sweep.
-            param_to_sweep (str): The parameter to sweep.
-            sweep_values (list): The values to sweep.
-            num_bands (int, optional): The number of bands to calculate. Defaults to 4.
-        
-        Returns:
-            list: A list of dictionaries with the simulation data.
-
-        """
-        data = []
-        old_geom  = self.geometry
-        old_num_bands = self.num_bands
-        for value in sweep_values:
-            kwargs = {param_to_sweep: value}
-            self.geometry = geom(**kwargs)
-            self.num_bands = num_bands
-            self.set_solver(k_point=mp.Vector3())
-            modes_zeven = self.run_simulation_with_output(runner="run_zeven", polarization="zeven")
-            modes_zodd  = self.run_simulation_with_output(runner="run_zodd", polarization="zodd")
-            data.append({
-                'parameter_value': value,
-                'modes_zeven': modes_zeven,
-                'modes_zodd': modes_zodd,
-                'parameter_name': param_to_sweep,
-            })
-        self.geometry = old_geom
-        self.num_bands = old_num_bands
-        return data
-    
+     
 
 
     def plot_sweep_result(self, data, fig=None) -> go.Figure:
@@ -1071,7 +1040,9 @@ class PhotonicCrystal:
     def basic_material():
         """
         Define the basic material of the photonic crystal.
-        Must be implemented in the derived class.
+
+        Returns:
+            material (Crystal_Materials): Silicon Membrane. 
         """
 
         material = Crystal_Materials()
@@ -1097,9 +1068,11 @@ def suppress_output():
         None: This context manager does not return any value.
 
     Example:
-        >>> with suppress_output():
-        ...     print("This will not be printed")
-        ...     raise ValueError("This error will not be shown")
+        ```python
+        with suppress_output():
+            print("This will not be printed")
+            raise ValueError("This error will not be shown")
+        ```
     """
     with open(os.devnull, 'w') as devnull:
         old_stdout = sys.stdout
@@ -1155,13 +1128,13 @@ class Crystal2D(PhotonicCrystal):
     
     def __init__(self,
                 lattice_type = "square",
+                material: Crystal_Materials = None,
+                geometry: Crystal2D_Geometry = None,
                 num_bands: int = 6,
                 resolution = 32,
-                interp: int =4,
-                periods: int =3, 
+                interp: int = 4,
+                periods: int = 3, 
                 pickle_id = None,
-                material : Crystal_Materials = None,
-                geometry: Crystal2D_Geometry = None,
                 use_XY = True,
                 k_point_max = 0.2):
         
@@ -1170,14 +1143,15 @@ class Crystal2D(PhotonicCrystal):
 
         Args:
             lattice_type (str): The type of lattice. Default is 'square' other option is 'triangular'. It determines the k-points if use_XY is False.
+            material (Crystal_Materials): The material of the photonic crystal. Default is None.
+            geometry (Crystal2D_Geometry): The geometry of the photonic crystal. Default is None.
             num_bands (int): The number of bands to calculate. Default is 6.
             resolution (tuple[int, int] | int): The resolution of the simulation. Default is (32, 32).
             interp (int): The interpolation factor for k-points. Default is 4.
             periods (int): The number of periods to simulate. Default is 3.
             pickle_id (str): The ID for pickling the simulation. Default is None.
-            material (Crystal_Materials): The material of the photonic crystal. Default is None.
-            geometry (list): The geometry of the photonic crystal. Default is None.
             use_XY (bool): Whether to use the X and Y directions for the x-axis or high symmetry points. Default is True.
+            k_point_max (float): The maximum k-point value. Default is 0.2.
         """
       
         super().__init__(lattice_type, material, geometry, num_bands, resolution, interp, periods, pickle_id, use_XY=use_XY)
@@ -1423,12 +1397,14 @@ class Crystal2D(PhotonicCrystal):
                             )-> tuple:
         """
         Plot the field components (Ex, Ey, Ez) and (Hx, Hy, Hz) for specific modes with consistent color scales.
+        For each component, the real, imaginary, or absolute value can be plotted.
 
         Args:
             target_polarization (str): The polarization of the target mode.
             target_k_point (tuple): The k-point of the target mode.
             target_frequency (float): The frequency of the target mode.
             frequency_tolerance (float): The tolerance for frequency similarity.
+            k_point_max_distance (float, optional): The maximum distance for k-point similarity. Default is None.
             periods (int): The number of periods to extract. Default is 1.
             quantity (str): The quantity to plot ('real', 'imag', or 'abs'). Default is 'real'.
             colorscale (str): The colorscale to use for the plot. Default is 'RdBu'.
@@ -1632,7 +1608,7 @@ class Crystal2D(PhotonicCrystal):
         Define the basic lattice of the photonic crystal.
 
         Args:
-            lattice_type (str): The type of lattice. Default is 'square'.
+            lattice_type (str): The type of lattice. Default is 'square'. Other option is 'triangular'.
 
         Returns:
             tuple: A tuple containing the lattice object representing the lattice and a list of k-points for the simulation.
@@ -1722,12 +1698,8 @@ class CrystalSlab(PhotonicCrystal):
             Defines the square lattice for the photonic crystal.
         triangular_lattice(height_supercell=4):
             Defines the triangular lattice for the photonic crystal.
-        basic_geometry(radius_1=0.2, eps_atom_1=1, radius_2=None, eps_atom_2=None, eps_bulk=12, height_supercell=4, height_slab=0.5, eps_background=1, eps_substrate=None):
+        basic_geometry(radius=0.2, material=None):
             Defines the basic geometry for the photonic crystal.
-        ellipsoid_geometry(e1=0.2, e2=0.3, eps_atom=1, height_supercell=4, height_slab=0.5, eps_background=1, eps_substrate=1, eps_diag=mp.Vector3(12, 12, 12), eps_offdiag=mp.Vector3(0, 0, 0), E_chi2_diag=mp.Vector3(0,0,0), E_chi3_diag=mp.Vector3(0,0,0)):
-            Defines the geometry with ellipsoidal atoms for the photonic crystal.
-        advanced_material_geometry(radius_1=0.2, epsilon_diag=mp.Vector3(12, 12, 12), epsilon_offdiag=mp.Vector3(0, 0, 0), chi2_diag=mp.Vector3(0,0,0), chi3_diag=mp.Vector3(0,0,0), eps_atom_1=1, eps_background=1, eps_substrate=1, height_supercell=4, height_slab=0.5):
-            Defines the advanced material geometry for the photonic crystal.
         plot_field(self, target_polarization, target_k_point, target_frequency, frequency_tolerance=0.01, k_point_max_distance=None, periods=1, component=2, quantity='real', colorscale='RdBu'):
             Plots the field for a specific mode based on the given parameters.
         plot_field_components(self, target_polarization, target_k_point, target_frequency, frequency_tolerance=0.01, k_point_max_distance=None, periods=1, quantity='real', colorscale='RdBu'):
@@ -1737,12 +1709,12 @@ class CrystalSlab(PhotonicCrystal):
     def __init__(self,
                 lattice_type = "square",
                 material: Crystal_Materials = None,
+                geometry = None, 
                 num_bands: int = 4,
                 resolution = mp.Vector3(32,32,16),
                 interp: int =2,
                 periods: int =3, 
                 pickle_id = None,
-                geometry = None, 
                 use_XY = True,
                 k_point_max = 0.2):
         """
@@ -1751,18 +1723,18 @@ class CrystalSlab(PhotonicCrystal):
         Args:
             lattice_type (str): The type of lattice. It can be 'square' or 'triangular'. Default is 'square'.
             material (Crystal_Materials): The material object for the photonic crystal. Default is None.
+            geometry (CrystalSlab_Geometry): The geometry of the photonic crystal. Default is None. If it is none, the basic geometry is used.
             num_bands (int): The number of bands to calculate. Default is 4.
             resolution (mp.Vector3): The resolution of the simulation. Default is mp.Vector3(32, 32, 16).
             interp (int): The interpolation factor for k-points. Default is 2.
             periods (int): The number of periods to use in some plotting functions. Default is 3.
             pickle_id (str): The ID for pickling the simulation. Default is None.
-            geometry (CrystalSlab_Geometry): The geometry of the photonic crystal. Default is None. If it is none, the basic geometry is used.
             use_XY (bool): Whether to use the X and Y directions for the x-axis or high symmetry points. Default is True.
             k_point_max (float): The maximum k-point value. Default is 0.2.
         """
 
 
-        super().__init__(lattice_type, material,geometry, num_bands, resolution, interp, periods, pickle_id, use_XY=True)
+        super().__init__(lattice_type, material,geometry, num_bands, resolution, interp, periods, pickle_id, use_XY)
         
         
         self.geometry_lattice, self.k_points = self.basic_lattice(lattice_type)
@@ -1873,9 +1845,9 @@ class CrystalSlab(PhotonicCrystal):
         """
 
         if lattice_type == 'square':
-            return CrystalSlab.square_lattice()
+            return CrystalSlab.square_lattice(height_supercell=height_supercell)
         elif lattice_type == 'triangular':
-            return CrystalSlab.triangular_lattice()
+            return CrystalSlab.triangular_lattice(height_supercell=height_supercell)
         else:
             raise ValueError("Invalid lattice type. Choose 'square' or 'triangular'.")
         
@@ -1922,6 +1894,17 @@ class CrystalSlab(PhotonicCrystal):
         radius = 0.2,
         material: Crystal_Materials = None,
     ):
+        """
+        Define the basic geometry for the photonic crystal slab.
+
+        Args:
+            radius (float): The radius of the cylinder. Default is 0.2.
+            material (Crystal_Materials): The material object for the photonic crystal. Default is None.
+
+        Returns:
+            CrystalSlab_Geometry: The geometry object representing the photonic crystal slab.
+        """
+
         if material is None:
             material = PhotonicCrystal.basic_material()
         geometry = CrystalSlab_Geometry(material = material, geometry_type='cylinder', radius = radius)
@@ -2127,6 +2110,7 @@ class CrystalSlab(PhotonicCrystal):
             target_k_point (tuple): The k-point of the target mode.
             target_frequency (float): The frequency of the target mode.
             frequency_tolerance (float): The tolerance for frequency similarity.
+            k_point_max_distance (float, optional): The maximum distance for k-point similarity. Default is None.
             periods (int): The number of periods to extract. Default is 1.
             quantity (str): The quantity to plot ('real', 'imag', or 'abs'). Default is 'real'.
             colorscale (str): The colorscale to use for the plot. Default is 'RdBu'.
