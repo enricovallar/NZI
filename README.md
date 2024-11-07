@@ -2,5 +2,5 @@
 
 Documentation for the Photonic Crystal Simulator package.
 
-[View the documentation]( https://enricovallar.github.io/nzi-lithium-niobate/nzi-lithium-niobate)
+[View the documentation]( https://enricovallar.github.io/nzi-lithium-niobate/)
 \
