@@ -1,5 +1,10 @@
 ## How to run this MPB based application?
 
+!!! warning
+
+    Linux is required. I use WSL with Ubuntu. But this can also work with HPC. 
+
+
 At its core this is a Python Dash application that use MPB to do the calculations. 
 
 In its current version MPB's Python interface is part of MEEP's Python interface. 
@@ -16,12 +21,15 @@ When you are connected:
 
 1. Click on Application
 2. Click on Terminal Emulator. 
-3. In the terminal write the command 'code'. It should open Visual Studio Code Vsc
-4. (Skip to 6 if you are  already logged with your GitHub account)
+3. In the terminal write the command 'code'.  It should open Visual Studio Code 
+
+## Set up Visual Studio Code (VSC)
+
+1. (Skip to 3 if you are  already logged with your GitHub account)
     On the bottom-left corner click on Accounts and then "Backup and Sync Settings..."
-5. You will be redirected to the GitHub login: follow the instructions. 
-6. Fork [my repo](https://github.com/enricovallar/nzi-lithium-niobate) into your account. 
-7. Go back to VSC and in a new window on the left panel click on Source Control (git symbol) and click on "Clone Repository". Clone the repository from GitHub following the instructions.
+2. You will be redirected to the GitHub login: follow the instructions. 
+3. Fork my repo [enricovallar/nzi-lithium-niobate](https://github.com/enricovallar/nzi-lithium-niobate) into your account.
+4. Go back to VSC and in a new window on the left panel click on Source Control (git symbol) and click on "Clone Repository". Clone the repository from GitHub following the instructions.
 
 ## Installing Miniconda
 We need a virtual conda envirenment to install MEEP. 
@@ -39,26 +47,28 @@ conda init
 ```
 
 
-After this restart your terminal. 
+## Activating the virtual envirenment
+Now we install the most important dependences:
 
-## Installing MEEP
-In the terminal:
+ - meep
+ - dash
+ - mkdocs
+
+
+```bash 
+conda create -n nzi-mp python=3.11 nzi-phc-finder -c enricovallar -c conda-forge -y
+conda activate nzi-mp
 ```
-conda create -n mp -c conda-forge pymeep pymeep-extras
+Make sure to always use the python interpreter of this virtual envirenment
 
-conda activate mp
+
+## Reading the docs
+```bash 
+mkdocs serve
 ```
-and reload the terminal
 
-
-## Installing Dash
-```
-conda install dash
-
-conda install dash-bootstrap-components
-
-conda install dash-daq
-```
+## Running the application
+When the right interpreter is chosen you just need to run ./src/app.py
 
 
 

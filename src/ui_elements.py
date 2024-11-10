@@ -531,13 +531,13 @@ sweep_parameter_dropdown.element = dbc.Row(
             id=sweep_parameter_dropdown.id,
             options=[
                 {'label': 'Radius - circular atom only', 'value': 'r'},
-                {'label': 'Edge Length - square atom only', 'value': 'a'},
+                {'label': 'Edge Length - square atom only', 'value': 'l'},
                 {'label': 'Axis A - elliptical or rectangular atom only', 'value': 'a'},
                 {'label': 'Axis B - elliptical or rectangular atom only', 'value': 'b'},
                 {'label': 'Height Slab - slab only', 'value': 'height_slab'},
                 {'label': 'Height Supercell - slab only', 'value': 'height_supercell'},
             ],
-            value='radius'
+            value='r'
         ), width=8),
     ],
     className="mt-3",

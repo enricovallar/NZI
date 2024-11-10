@@ -1,0 +1,63 @@
+# your_project/conda-recipe/meta.yaml
+
+{% set name = "nzi-phc-finder" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name }}
+  version: "{{ version }}"
+
+source:
+  path: ../src
+
+build:
+  number: 0
+  script: "{{ PYTHON }} -m pip install ."
+
+requirements:
+  build:
+    - python=3.11
+    - setuptools
+    - pip
+    - pymeep=1.29.0=nompi_py311h1234567_103
+    - pymeep-extras=1.29.0=nompi_py311h82cca05_103
+    - dash
+    - dash-bootstrap-components
+    - dash-daq
+    - plotly
+    - nbformat
+    - mkdocs
+    - mkdocs-material
+    - mkdocstrings
+    - mkdocstrings-python
+    - pymdown-extensions
+    - mkdocs-git-revision-date-localized-plugin
+    
+    
+  run:
+    - python=3.11
+    - pip
+    - pymeep=1.29.0=nompi_py311h1234567_103
+    - pymeep-extras=1.29.0=nompi_py311h82cca05_103
+    - dash
+    - dash-bootstrap-components
+    - dash-daq
+    - plotly
+    - nbformat
+    - mkdocs
+    - mkdocs-material
+    - mkdocstrings
+    - mkdocstrings-python
+    - pymdown-extensions
+    - mkdocs-git-revision-date-localized-plugin
+
+
+
+about:
+  home: "https://github.com/enricovallar/nzi-lithium-niobate"
+  license: "GNU General Public License v3.0 or later (GPLv3+)"
+  summary: "This package is a collection of scripts to find the photonic crystal zni modes"
+
+extra:
+  recipe-maintainers:
+    - enricovallar

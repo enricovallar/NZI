@@ -38,6 +38,7 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], prevent_i
 crystal_active = None 
 configuration_active = None
 active_mode_groups = None
+mode_data_to_plot = None
 
 
 # Create the layout
@@ -191,6 +192,20 @@ app.layout = dbc.Container([
             style={'width': '100%'}
         ), width=8),
     ], className="mt-3"),
+
+    # Toggle to choose if plot fields with bloch phase or not
+    dbc.Row([
+        dbc.Col([
+            html.Label("Plot Fields with Bloch Phase"),
+            daq.BooleanSwitch(id='bloch-phase-toggle', on=True, style={'marginLeft': '10px'})
+        ], width=6, style={'display': 'flex', 'alignItems': 'center'}),
+    ], className="mt-3"),
+
+
+    # Button to update the field plots
+    dbc.Row([
+        dbc.Col(dbc.Button("Update Field Plots", id="update-field-plots-button", color="primary"), width=4),
+    ], className="mt-3"),
     
    
     # Placeholder for the electric field plot, three components
@@ -303,9 +318,14 @@ def update_geometry_configurator(geometry_type, crystal_type):
     return geometry_configuration_elements_list
 
 
-# Callback to set the active crystal and configuration
+# Callback to set the active crystal and configuration, reset plots
 @app.callback(
-    Output('message-box', 'value', allow_duplicate=True),
+    [Output('message-box', 'value', allow_duplicate=True),
+    Output('epsilon-graph', 'figure', allow_duplicate=True),
+    Output('bands-graph', 'figure', allow_duplicate=True),
+    Output('e-field-graph', 'figure', allow_duplicate=True),
+    Output('h-field-graph', 'figure', allow_duplicate=True),
+    Output('sweep-result-graph', 'figure', allow_duplicate=True),],
     [Input('update-crystal-button', 'n_clicks')],
     [State('message-box', 'value'),
      State('crystal-id-input', 'value'),
@@ -346,7 +366,9 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
     if n_clicks is None:
         return previous_message
 
-    global crystal_active, configuration_active
+    global crystal_active, configuration_active, mode_data_to_plot
+
+    mode_data_to_plot = None
     
     if advanced_material is True:
         bulk_material_configuration = {
@@ -374,7 +396,7 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
             geometry = Crystal2D_Geometry(material=material, geometry_type=geometry_type, r=radius)
         elif geometry_type == 'square':
             edge_length = float(edge_length)
-            geometry = Crystal2D_Geometry(material=material, geometry_type=geometry_type, a=edge_length)
+            geometry = Crystal2D_Geometry(material=material, geometry_type=geometry_type, l=edge_length)
         elif geometry_type == 'elliptical':
             a = float(a)
             b = float(b)
@@ -457,7 +479,9 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
 > The active crystal has been updated to {crystal_active.pickle_id}. Run the simulation to store modes.
   Press Show Dielectric to plot the dielectric function (plotted for the gamma point, 1st band).
 """
-    return previous_message + new_message
+    
+    fig = go.Figure()
+    return previous_message + new_message, fig, fig, fig, fig, fig
 
 
 # Callback to save the active crystal, configuration and run_flag to a file as a pickle
@@ -678,8 +702,11 @@ def show_dielectric(n_clicks, epsilon_fig, previous_message):
 def run_simulation_callback(n_clicks, epsilon_fig, bands_fig, previous_message):
     global crystal_active
 
+    if crystal_active is None:
+        return dash.no_update, dash.no_update, previous_message + "\nNo active crystal to run the simulation."
+
     if n_clicks is None:
-        return dash.no_update, dash.no_update, previous_message + "\nRun Simulation button not clicked.", dash.no_update
+        return dash.no_update, dash.no_update, previous_message + "\nRun Simulation button not clicked."
 
     epsilon_fig, bands_fig, msg = run_simulation(crystal_active)
 
@@ -697,13 +724,15 @@ def run_simulation_callback(n_clicks, epsilon_fig, bands_fig, previous_message):
     State('frequency-tolerance-input', 'value'),
     State('operation-dropdown', 'value'),
     State('field-periods-to-plot-input', 'value'),
+    State('bloch-phase-toggle', 'on'),
     State('message-box', 'value'),
     prevent_initial_call=True
 )
-def update_field_plots(clickData, e_field_fig, h_field_fig, frequency_tolerance, operation, periods, previous_message):
+def update_field_plots_by_click(clickData, e_field_fig, h_field_fig, frequency_tolerance, operation, periods, bloch_phase, previous_message):
     if clickData is None:
         return e_field_fig, h_field_fig, previous_message + "\nNo point selected in the bands plot."
-    global crystal_active
+    global crystal_active, mode_data_to_plot
+    
 
     if crystal_active is None:
         return e_field_fig, h_field_fig, previous_message + "\nNo active crystal for field plotting."
@@ -716,11 +745,18 @@ def update_field_plots(clickData, e_field_fig, h_field_fig, frequency_tolerance,
     kx, ky, kz, freq, polarization = clickData['points'][0]['customdata']
     k_point = mp.Vector3(kx, ky, kz)
 
+    mode_data_to_plot = {
+        'k_point': k_point,
+        'freq': freq,
+        'polarization': polarization,
+    }
+
     e_field_fig, h_field_fig = crystal_active.plot_field_components(polarization, k_point, freq, 
                                                        frequency_tolerance=frequency_tolerance, 
                                                        k_point_max_distance=None, 
                                                        quantity=operation, 
-                                                       periods=periods)
+                                                       periods=periods,
+                                                       bloch_phase=bloch_phase)
 
     e_field_fig.update_layout(width=1400, height=700)
     h_field_fig.update_layout(width=1400, height=700)
@@ -728,6 +764,52 @@ def update_field_plots(clickData, e_field_fig, h_field_fig, frequency_tolerance,
     
     return e_field_fig, h_field_fig, new_message
 
+# Callback to update the field plots when the update field plots button is clicked
+@app.callback(
+    [Output('e-field-graph', 'figure', allow_duplicate=True),
+     Output('h-field-graph', 'figure', allow_duplicate=True),
+     Output('message-box', 'value', allow_duplicate=True)],
+    Input('update-field-plots-button', 'n_clicks'),
+    State('e-field-graph', 'figure'),
+    State('h-field-graph', 'figure'),
+    State('frequency-tolerance-input', 'value'),
+    State('operation-dropdown', 'value'),
+    State('field-periods-to-plot-input', 'value'),
+    State('bloch-phase-toggle', 'on'),
+    State('message-box', 'value'),
+    prevent_initial_call=True
+)
+def update_field_plots_button(n_clicks, e_field_fig, h_field_fig, frequency_tolerance, operation, periods,bloch_phase, previous_message):
+    if n_clicks is None:
+        return e_field_fig, h_field_fig, previous_message + "\nUpdate Field Plots button not clicked."
+    
+    global crystal_active, mode_data_to_plot
+
+    if crystal_active is None:
+        return e_field_fig, h_field_fig, previous_message + "\nNo active crystal for field plotting."
+
+    if crystal_active.has_been_run is False:
+        return e_field_fig, h_field_fig, previous_message + "\nSimulation not yet run. Please run the simulation first."
+
+    if mode_data_to_plot is None:
+        return e_field_fig, h_field_fig, previous_message + "\nNo mode data available for field plotting."
+
+    k_point = mode_data_to_plot['k_point']
+    freq = mode_data_to_plot['freq']
+    polarization = mode_data_to_plot['polarization']
+
+    e_field_fig, h_field_fig = crystal_active.plot_field_components(polarization, k_point, freq, 
+                                                       frequency_tolerance=frequency_tolerance, 
+                                                       k_point_max_distance=None, 
+                                                       quantity=operation, 
+                                                       periods=periods, 
+                                                       bloch_phase=bloch_phase)
+
+    e_field_fig.update_layout(width=1400, height=700)
+    h_field_fig.update_layout(width=1400, height=700)
+    new_message = previous_message + f"\nFields updated for k-point ({k_point.x:.3f}, {k_point.y:.3f}, {k_point.z:.3f}) and frequency {freq:0.4f}."
+    
+    return e_field_fig, h_field_fig, new_message
 
 # Callback to toggle the visibility of advanced material configuration
 @app.callback(
