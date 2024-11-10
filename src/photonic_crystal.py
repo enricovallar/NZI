@@ -8,7 +8,6 @@ import os
 import sys
 import plotly.graph_objects as go
 import numpy as np
-import group_theory_analysis as gta
 from plotly.subplots import make_subplots
 from collections import defaultdict
 from functools import partial
