@@ -1,56 +1,104 @@
-site_name: My Docs
+site_name: NZI PHOTONIC CRYSTAL MODES FINDER
+site_description: Documentation for the NZI Photonic Crystal Modes Finder
+repo_url: https://github.com/enricovallar/nzi-lithium-niobate
+repo_name: nzi-lithium-niobate
+
+
 theme:
-  name: 'material'
+  name: material
+  favicon: images/favicon.ico
   features:
-    - navigation.sections
     - navigation.tabs
+    - navigation.sections
     - navigation.top
-    - toc.integrate
+    - navigation.sticky
+    - navigation.instant.preview
+    - navigation.instant
+    - navigation.expand
+    - search.suggest
+    - search.highlight
     - content.code.copy
-    - search.highlight # Highlight search results
-    - search.suggest # Show search suggestions
-    - content.tabs.link # Sync tabs across pages
+    - content.nav.top
+
+
   palette:
-    - scheme: default
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
     - scheme: slate
+      primary: indigo
+      accent: indigo
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
-
-markdown_extensions:
-  - toc:
-      permalink: true
-      toc_depth: 3
-  - pymdownx.highlight:
-      anchor_linenums: true
-  - pymdownx.superfences # Better code blocks
-  - pymdownx.tabbed # Content tabs
-  - pymdownx.tasklist # Task lists
-  - admonition # Add note boxes
-  - pymdownx.details # Collapsible blocks
-  - pymdownx.emoji # Emojis
-  - pymdownx.arithmatex: # Math equations
-      generic: true
-  - attr_list # Add attributes to elements
-
-extra:
-  analytics:
-    provider: google
-    property: !ENV GOOGLE_ANALYTICS_KEY
-  social:
-    - icon: fontawesome/brands/github 
-      link: https://github.com/enricovallar
-  provider: mike  # Version selector
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
 
 plugins:
   - search
-  - mkdocstrings
-  - git-revision-date-localized # Show last update date
-  - minify:
-      minify_html: true
+  - mkdocstrings:
+      handlers:
+        python:
+          setup_commands:
+            - import sys
+            - sys.path.append(".")
+          selection:
+            members: true
+          options:
+            group_by_category: true
+            show_category_heading: true
+            show_source: true
+            heading_level: 2  # Start headings from level 2
+            show_root_full_path: true  # Show the full path of the root object
+            show_root_heading: true
+            cross_ref:
+              alias: full
+            members_order: source
+
+markdown_extensions:
+  - pymdownx.details
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+      permalink_title: Anchor link to this section
+      toc_depth: 6
+      separator: "_"
+  - pymdownx.superfences
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.tasklist
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - footnotes
 
 watch:
   - src
+
+extra_javascript:
+    - javascripts/mathjax.js
+    - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/enricovallar/nzi-lithium-niobate
+
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Development: for_me.md
+  - API Reference:
+      - Python Interface: 
+          - crystal_geometries: api/crystal_geometries.md
+          - crystal_materials: api/crystal_materials.md
+          - photonic_crystal: api/photonic_crystal.md
+          - crystal_analysis: api/crystal_analysis.md

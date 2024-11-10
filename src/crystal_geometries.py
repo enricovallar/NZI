@@ -41,7 +41,7 @@ class Crystal_Geometry:
 
 
     
-    def square_atom(self, a):
+    def square_atom(self, l):
         '''
         Adds a square atom to the geometry.
 
@@ -230,7 +230,7 @@ class Crystal2D_Geometry(Crystal_Geometry):
                                         radius=r,
                                         ))
         
-    def square_atom(self, a: float = 0.5, center: mp.Vector3 = mp.Vector3(0,0)):
+    def square_atom(self, l: float = 0.5, center: mp.Vector3 = mp.Vector3(0,0)):
         """
         Adds a square atom to the geometry.
 
@@ -242,7 +242,7 @@ class Crystal2D_Geometry(Crystal_Geometry):
             None
         """
 
-        self.geometry.append(mp.Block(size = mp.Vector3(a, a, 0),
+        self.geometry.append(mp.Block(size = mp.Vector3(l, l, 0),
                                         material=self.material.atom, 
                                         center = center))
     
@@ -389,7 +389,7 @@ class CrystalSlab_Geometry(Crystal_Geometry):
             height=self.height_slab
         ))
 
-    def square_atom(self, a: float = 0.5, center: mp.Vector3 = mp.Vector3(0, 0)):
+    def square_atom(self, l: float = 0.5, center: mp.Vector3 = mp.Vector3(0, 0)):
         """
         Adds a square block atom to the slab geometry.
 
@@ -398,7 +398,7 @@ class CrystalSlab_Geometry(Crystal_Geometry):
             center (mp.Vector3, optional): Center of the square atom. Defaults to mp.Vector3(0,0).
         """
         self.geometry.append(mp.Block(
-            size=mp.Vector3(a, a, self.height_slab),
+            size=mp.Vector3(l, l, self.height_slab),
             material=self.material.atom, 
             center=center
 

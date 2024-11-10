@@ -6,6 +6,7 @@ docs/mkdocs_venv/
 site/
 build/
 dist/
+conda-build/
 
 # Python
 __pycache__/
