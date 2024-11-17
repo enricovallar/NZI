@@ -13,6 +13,7 @@ from collections import defaultdict
 from functools import partial
 from crystal_geometries import Crystal_Geometry, Crystal2D_Geometry, CrystalSlab_Geometry
 from crystal_materials import Crystal_Materials
+from scipy.optimize import minimize
 
 
 
@@ -968,7 +969,7 @@ class PhotonicCrystal:
         old_geom  = self.geometry
         old_num_bands = self.num_bands
 
-        partial_geom = self.geometry.to_partial(exclude_key=param_to_sweep)
+        partial_geom = self.geometry.to_partial(exclude_keys=param_to_sweep)
         for value in sweep_values:
             kwargs = {param_to_sweep: value}
             self.geometry = partial_geom(**kwargs)
@@ -985,6 +986,147 @@ class PhotonicCrystal:
         self.geometry = old_geom
         self.num_bands = old_num_bands
         return data
+
+    def find_candidate_modes(self,  target_freq, runner="run_zeven", polarization="zeven"):
+        self.set_solver(k_point=mp.Vector3())
+        modes = self.run_simulation_with_output(runner=runner, polarization=polarization)
+        sorted_modes = sorted(modes, key=lambda x: abs(x["freq"] - target_freq))
+        candidate_modes = sorted_modes[:3]
+        candidate_modes = sorted(candidate_modes, key=lambda x: x["freq"])
+        return candidate_modes
+    
+    def gaps_between_candidate_modes(self, modes, target_freq, params: dict, runner="run_zeven", polarization="zeven"):
+        gaps = []
+        old_geom = self.geometry
+        partial_geom = self.geometry.to_partial(exclude_keys=params.keys())
+        self.geometry = partial_geom(**params)
+        candidate_modes = self.find_candidate_modes(target_freq, runner=runner, polarization=polarization)
+        for i in range(len(modes)-1):
+            gap = candidate_modes[i+1]["freq"] - candidate_modes[i]["freq"]
+            gaps.append(gap)
+        self.geometry = old_geom
+        return gaps
+    
+    def find_gaps_between_candidate_modes(self, target_freq, params:dict, runner="run_zeven", polarization="zeven"):
+        gaps = []
+        old_geom = self.geometry
+        partial_geom = self.geometry.to_partial(exclude_keys=list(params.keys()))
+        self.geometry = partial_geom(**params)
+        self.set_solver(k_point=mp.Vector3())
+        candidate_modes = self.find_candidate_modes(target_freq, runner=runner, polarization=polarization)
+        for i in range(len(candidate_modes)-1):
+            gap = candidate_modes[i+1]["freq"] - candidate_modes[i]["freq"]
+            gaps.append(gap)
+        self.geometry = old_geom
+        return gaps
+    
+    def find_dirac_point(self, target_freq, params: dict, bounds: dict, 
+                        runner="run_zeven", polarization="zeven",
+                        maxiter=100,
+                        tol=1e-6,
+                        verbose=False):
+        """
+        This function minimizes the gaps between the three closest candidate modes to find the Dirac points.
+        We aim to find the degeneracy of the bands by bringing three modes together.
+        This function returns the corresponding parameter values for the Dirac points, within specified bounds.
+        """
+        import scipy.optimize
+
+        # Extract parameter names and initial values
+        param_names = list(params.keys())
+        initial_values = [params[name] for name in param_names]
+
+        # Extract bounds for the parameters
+        de_bounds = [bounds[name] for name in param_names]
+
+        # Define the objective function to minimize
+        def objective(param_values):
+            # Map the parameter values back to a dictionary
+            current_params = dict(zip(param_names, param_values))
+
+            # Compute the gaps using the existing method
+            gaps = self.find_gaps_between_candidate_modes(
+                target_freq=target_freq,
+                params=current_params,
+                runner=runner,
+                polarization=polarization
+            )
+
+            if verbose:
+                def format_numbers(obj):
+                    if isinstance(obj, dict):
+                        return {k: format_numbers(v) for k, v in obj.items()}
+                    elif isinstance(obj, list):
+                        return [format_numbers(v) for v in obj]
+                    elif isinstance(obj, float):
+                        return f"{obj:.4e}"
+                    else:
+                        return obj
+
+                formatted_params = format_numbers(current_params)
+                formatted_gaps = format_numbers(gaps)
+                print("Current parameters:", formatted_params, "Gaps:", formatted_gaps)
+            
+            # Objective is the maximum of the gaps
+            return max(gaps)
+
+        # Define the callback function
+        def callback(xk, convergence=None):
+            """
+            Callback function to terminate the optimization early if the objective
+            function is less than 1e-9.
+            
+            Parameters:
+            - xk: Current parameter vector.
+            - convergence: Current convergence value (not used here).
+            
+            Returns:
+            - True to stop the optimization if the condition is met.
+            - False to continue otherwise.
+            """
+            current_obj = objective(xk)
+            if verbose:
+                print(f"Callback: Current objective = {current_obj:.4e}")
+            if current_obj < 1e-9:
+                if verbose:
+                    print("Objective below 1e-9. Stopping optimization early.")
+                return True  # Terminate the optimization
+            return False  # Continue the optimization
+
+        # Run differential evolution for global optimization with callback
+        result = scipy.optimize.differential_evolution(
+            objective,
+            bounds=de_bounds,
+            strategy='best1bin',
+            maxiter=maxiter,
+            tol=tol,
+            mutation=(0.5, 1),
+            recombination=0.7,
+            seed=None,
+            callback=callback,  # Integrate the callback here
+            disp=verbose,
+            polish=True,
+            init='latinhypercube'
+        )
+        
+        # Check if optimization was successful or stopped by callback
+        if not result.success and result.message != 'callback function requested stop early':
+            raise RuntimeError(f"Optimization failed: {result.message}")
+
+        # Map the optimized parameter values back to their names
+        optimal_param_values = result.x
+        optimal_params = dict(zip(param_names, optimal_param_values))
+
+        if verbose:
+            print("Optimization completed successfully.")
+            print("Optimal Parameters:", optimal_params)
+            print("Objective Value:", result.fun)
+
+        return optimal_params
+
+
+    
+
      
 
 
@@ -1009,8 +1151,8 @@ class PhotonicCrystal:
             modes_zeven = [d['modes_zeven'][i] for d in data]
             modes_zodd = [d['modes_zodd'][i] for d in data]
             param_values = [d['parameter_value'] for d in data]   
-            fig.add_trace(go.Scatter(x=param_values, y=[m["freq"] for m in modes_zeven], mode='lines+markers', name=f'Band {i} TE', line=dict(color='red'), marker=dict(symbol=i, size=10)))
-            fig.add_trace(go.Scatter(x=param_values, y=[m["freq"] for m in modes_zodd], mode='lines+markers', name=f'Band {i} TM', line=dict(color='blue'), marker=dict(symbol=i, size=10)))
+            fig.add_trace(go.Scatter(x=param_values, y=[m["freq"] for m in modes_zeven], mode='lines+markers', name=f'Band {i} zeven', line=dict(color='red'), marker=dict(symbol=i, size=10)))
+            fig.add_trace(go.Scatter(x=param_values, y=[m["freq"] for m in modes_zodd], mode='lines+markers', name=f'Band {i} zodd', line=dict(color='blue'), marker=dict(symbol=i, size=10)))
         fig.update_layout(
             autosize=False,
             width=700,
@@ -1938,9 +2080,9 @@ class CrystalSlab(PhotonicCrystal):
             use_XY (bool): Whether to use the X and Y directions for the x-axis or high symmetry points. Default is True.
             k_point_max (float): The maximum k-point value. Default is 0.2.
         """
+        
 
-
-        super().__init__(lattice_type, material,geometry, num_bands, resolution, interp, periods, pickle_id, use_XY)
+        super().__init__(lattice_type, material,geometry, num_bands, resolution, interp, periods, pickle_id, use_XY=use_XY)
         
         
         self.geometry_lattice, self.k_points = self.basic_lattice(lattice_type)

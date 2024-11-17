@@ -140,6 +140,31 @@ def integrate_field(F, resolution, periods):
 
     return F_integrated
 
+def avg1D(F, resolution, periods, axis="x"):
+    """ Integrate a 1D field over the edge of a periodic domain.
+    
+    Args:
+        F (numpy.ndarray): 1D array representing the field to be integrated.
+        resolution (int): Number of points in the grid.
+        periods (int): Number of periods in the domain.
+        axis (str): Axis along which to integrate. Must be 'x' or 'y'.
+        
+    Returns:
+        float: The integrated value of the field normalized by the number of periods.
+
+    """
+
+    if axis != "x" and axis != "y":
+        raise ValueError("Axis must be 'x' or 'y'")
+
+    dx = dy =  1.0 / resolution
+    F_edge = F[0,:] if axis == "y" else F[:,0]
+    F_integrated = np.sum(F_edge)*dx / periods if axis == "x" else np.sum(F_edge)*dy / periods
+
+    return F_integrated
+
+
+
 
 def calculate_effective_parameters(E_i_avg, H_j_avg, freq, k_l):
     """Calculate effective permittivity (epsilon_eff) and permeability (mu_eff).
@@ -166,6 +191,25 @@ def calculate_effective_parameters(E_i_avg, H_j_avg, freq, k_l):
     mu_eff = (k_l / freq) * (np.real(E_i_avg) / np.real(H_j_avg))
     
     return epsilon_eff, mu_eff
+
+def calculate_effective_impedance(E_i_avg1d: float, H_j_avg1d: float, sgn: int):
+    """
+    Calculate the effective impedance of a mode.
+
+    Args:
+        E_i_avg1d (float): Averaged i-component of the electric field.
+        H_j_avg1d (float): Averaged j-component of the magnetic field.
+        sgn (int): Sign to multiply the impedance by.
+
+    Returns:
+        float: The effective impedance of the mode.
+    """
+
+    if sgn != 1 and sgn != -1:
+        raise ValueError("Sign must be 1 or -1")
+
+    eta = sgn*np.real(E_i_avg1d)/np.real(H_j_avg1d)
+    return eta
 
 
 def example_analysis(): 

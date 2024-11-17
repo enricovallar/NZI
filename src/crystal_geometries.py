@@ -124,20 +124,23 @@ class Crystal_Geometry:
         """ 
         return self.geometry.copy()
     
-    def to_partial(self, exclude_key): 
+    def to_partial(self, exclude_keys): 
         """
-        Returns a partial function with the specified key excluded from the arguments.
+        Returns a partial function with the specified keys excluded from the arguments.
         This is useful for sweeps.
 
         Args:
-            exclude_key (str): Key to exclude from the arguments.
+            exclude_keys (list): List of keys to exclude from the arguments.
 
         Returns:
-            partial: Partial function with the specified key excluded from the arguments.
+            partial: Partial function with the specified keys excluded from the arguments.
         """ 
+        if not isinstance(exclude_keys, list):
+            exclude_keys = [exclude_keys]
         arguments = self.arguments.copy()
-        arguments.pop(exclude_key)
-        return partial(self.__class__, **self.arguments)
+        for key in exclude_keys:
+            arguments.pop(key, None)  # Use pop with default to avoid KeyError
+        return partial(self.__class__, **arguments)
         
 
         
@@ -235,7 +238,7 @@ class Crystal2D_Geometry(Crystal_Geometry):
         Adds a square atom to the geometry.
 
         Args:
-            a (float, optional): Length of each side of the square atom. Defaults to 0.5.
+            l (float, optional): Length of each side of the square atom. Defaults to 0.5.
             center (mp.Vector3, optional): Center of the square atom. Defaults to mp.Vector3(0,0).
 
         Returns:
@@ -263,7 +266,7 @@ class Crystal2D_Geometry(Crystal_Geometry):
                             material=self.material.atom, 
                             center = center))
     
-    def elliptical_atom(self, a : float = 0.2, b : float = 0.5, center: mp.Vector3 = mp.Vector3(0,0)):
+    def elliptical_atom(self, a : float = 0.2, b : float = 0.5, center: mp.Vector3 = mp.Vector3(0,0), e1 = mp.Vector3(1,0), e2 = mp.Vector3(0,1)):
         """
         Adds an elliptical atom to the geometry.    
 
@@ -278,7 +281,8 @@ class Crystal2D_Geometry(Crystal_Geometry):
         self.geometry.append(mp.Ellipsoid(
                                       size = mp.Vector3(a, b, mp.inf),
                                       material=self.material.atom, 
-                                      center = center))
+                                      center = center,
+        ))
 
         
 
@@ -307,20 +311,29 @@ class CrystalSlab_Geometry(Crystal_Geometry):
             height_slab (float, optional): Height of the slab. Defaults to 0.5.
             height_supercell (float, optional): Height of the supercell. Defaults to 4.0.
             **kwargs: Additional arguments specific to the geometry type.
-                If `geometry_type` is 'circular', kwargs may include:
-                    r (float): Radius of the circular atom.
-                    center (mp.Vector3): Center of the circular atom.   
-                If `geometry_type` is 'square', kwargs may include:
-                    a (float): Side length of the square atom.
-                    center (mp.Vector3): Center of the square atom.
-                If `geometry_type` is 'rectangular', kwargs may include:
-                    a (float): Width of the rectangular atom.
-                    b (float): Height of the rectangular atom.
-                    center (mp.Vector3): Center of the rectangular atom.
-                If `geometry_type` is 'elliptical', kwargs may include:
-                    a (float): Length of the major axis.
-                    b (float): Length of the minor axis.
-                    center (mp.Vector3): Center of the elliptical atom.
+
+                - If `geometry_type` is 'circular', kwargs may include:
+
+                    -r (float): Radius of the circular atom.
+                    -center (mp.Vector3): Center of the circular atom. 
+
+                - If `geometry_type` is 'square', kwargs may include:
+
+                    - l (float): Side length of the square atom.
+                    - center (mp.Vector3): Center of the square atom.
+
+                - If `geometry_type` is 'rectangular', kwargs may include:
+
+                    - a (float): Width of the rectangular atom.
+                    - b (float): Height of the rectangular atom.
+                    - center (mp.Vector3): Center of the rectangular atom.
+                    
+                - If `geometry_type` is 'elliptical', kwargs may include:
+
+                    - a (float): Length of the major axis.
+                    - b (float): Length of the minor axis.
+                    - center (mp.Vector3): Center of the elliptical atom.
+
         Raises:
             ValueError: If an invalid `geometry_type` is provided.
 

@@ -369,6 +369,10 @@ def update_crystal(n_clicks, previous_message, crystal_id, crystal_type, lattice
     global crystal_active, configuration_active, mode_data_to_plot
 
     mode_data_to_plot = None
+    epsilon_diag = string_to_vector3(epsilon_diag)
+    epsilon_offdiag = string_to_vector3(epsilon_offdiag)
+    E_chi2_diag = string_to_vector3(E_chi2_diag)
+    E_chi3_diag = string_to_vector3(E_chi3_diag)
     
     if advanced_material is True:
         bulk_material_configuration = {
@@ -856,6 +860,7 @@ def run_sweep(n_clicks, sweep_parameter, start, end, steps, previous_message):
     sweep_values = np.linspace(start, end, steps)
     sweep_results = crystal_active.sweep_geometry_parameter(sweep_parameter, sweep_values, crystal_active.num_bands)
     fig = crystal_active.plot_sweep_result(sweep_results)
+    fig.update_layout(width=1400, height=700)
     msg = f"Sweep results plotted for parameter {sweep_parameter}.\n"
 
     return fig, previous_message + msg

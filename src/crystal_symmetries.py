@@ -15,7 +15,6 @@ def reflection_matrix(angle):
         [ np.cos(rad),  np.sin(rad)],
         [ np.sin(rad), -np.cos(rad)]
     ])
-
 # Symmetry operations for C4v point group (square lattice)
 C4v_operations = {
     "E": np.identity(2),
@@ -36,13 +35,77 @@ C6v_operations = {
     "C2": rotation_matrix(180),       # 180-degree rotation
     "C3^2": rotation_matrix(240),     # 240-degree rotation
     "C6^5": rotation_matrix(300),     # 300-degree rotation
-    "sigma_y": reflection_matrix(0), # Reflection over x-axis
-    "sigma_x'": reflection_matrix(30),# Reflection over 30 degrees
+    "sigma_y": reflection_matrix(0),   # Reflection over x-axis
+    "sigma_x'": reflection_matrix(30), # Reflection over 30 degrees
     "sigma_y''": reflection_matrix(60),# Reflection over 60 degrees
-    "sigma_x": reflection_matrix(90),# Reflection over y-axis
+    "sigma_x": reflection_matrix(90),  # Reflection over y-axis
     "sigma_y'": reflection_matrix(120),# Reflection over 120 degrees
     "sigma_x''": reflection_matrix(150) # Reflection over 150 degrees
 }
+
+# Irreducible representations of C4v point group
+C4v_irrep = [{
+    "A1": {"E": 1, "C4": 1, "C2": 1, "C4^3": 1, "sigma_x": 1, "sigma_y": 1, "sigma_d'": 1, "sigma_d''": 1},
+    "A2": {"E": 1, "C4": 1, "C2": 1, "C4^3": 1, "sigma_x": -1, "sigma_y": -1, "sigma_d'": -1, "sigma_d''": -1},
+    "B1": {"E": 1, "C4": -1, "C2": 1, "C4^3": -1, "sigma_x": 1, "sigma_y": 1, "sigma_d'": -1, "sigma_d''": -1},
+    "B2": {"E": 1, "C4": -1, "C2": 1, "C4^3": -1, "sigma_x": -1, "sigma_y": -1, "sigma_d'": 1, "sigma_d''": 1},
+    "E": {"E": 2, "C4": 0, "C2": -2, "C4^3": 0, "sigma_x": 0, "sigma_y": 0, "sigma_d'": 0, "sigma_d''": 0}
+}]
+
+# Irreducible representations of C6v point group
+C6v_irrep = [{
+    "A1": {"E": 1, "C6": 1, "C3": 1, "C2": 1, "C3^2": 1, "C6^5": 1, "sigma_y": 1, "sigma_x'": 1, "sigma_y''": 1, "sigma_x": 1, "sigma_y'": 1, "sigma_x''": 1},
+    "A2": {"E": 1, "C6": 1, "C3": 1, "C2": 1, "C3^2": 1, "C6^5": 1, "sigma_y": -1, "sigma_x'": -1, "sigma_y''": -1, "sigma_x": -1, "sigma_y'": -1, "sigma_x''": -1},
+    "B1": {"E": 1, "C6": -1, "C3": 1, "C2": -1, "C3^2": 1, "C6^5": -1, "sigma_y": 1, "sigma_x'": -1, "sigma_y''": 1, "sigma_x": -1, "sigma_y'": 1, "sigma_x''": -1},
+    "B2": {"E": 1, "C6": -1, "C3": 1, "C2": -1, "C3^2": 1, "C6^5": -1, "sigma_y": -1, "sigma_x'": 1, "sigma_y''": -1, "sigma_x": 1, "sigma_y'": -1, "sigma_x''": 1},
+    "E1": {"E": 2, "C6": 1, "C3": -1, "C2": -2, "C3^2": -1, "C6^5": 1, "sigma_y": 0, "sigma_x'": 0, "sigma_y''": 0, "sigma_x": 0, "sigma_y'": 0, "sigma_x''": 0},
+    "E2": {"E": 2, "C6": -1, "C3": -1, "C2": 2, "C3^2": -1, "C6^5": -1, "sigma_y": 0, "sigma_x'": 0, "sigma_y''": 0, "sigma_x": 0, "sigma_y'": 0, "sigma_x''": 0}
+}]
+
+C2v_irrep =[ {
+    "A1": {"E": 1, "C2": 1, "sigma_x": 1, "sigma_y": 1},
+    "A2": {"E": 1, "C2": 1, "sigma_x": -1, "sigma_y": -1},
+    "B1": {"E": 1, "C2": -1, "sigma_x": 1, "sigma_y": -1},
+    "B2": {"E": 1, "C2": -1, "sigma_x": -1, "sigma_y": 1}
+}]
+
+C_1h_irrep =[ {
+    "A": {"E": 1, "sigma_y":1},
+    "B": {"E": -1, "sigma_y": -1}
+    },
+    {
+    "A": {"E": 1, "sigma_x":1},
+    "B": {"E": -1, "sigma_x": -1}
+    },
+    {
+    "A": {"E": 1, "sigma_d'":1},
+    "B": {"E": -1, "sigma_d'": -1}
+    },
+]
+
+# Symmetry operations for C3v point group (equilateral triangular lattice)
+C3v_operations = {
+    "E": np.identity(2),              # Identity operation
+    "C3": rotation_matrix(120),       # 120-degree rotation
+    "C3^2": rotation_matrix(240),     # 240-degree rotation
+    "sigma_v": reflection_matrix(0),   # Reflection over x-axis
+    "sigma_v'": reflection_matrix(120),# Reflection over 120 degrees
+    "sigma_v''": reflection_matrix(240)# Reflection over 240 degrees
+}
+
+# Irreducible representations of C3v point group
+C3v_irrep = [{
+    "A1": {"E": 1, "C3": 1, "C3^2": 1, "sigma_v": 1, "sigma_v'": 1, "sigma_v''": 1},
+    "A2": {"E": 1, "C3": 1, "C3^2": 1, "sigma_v": -1, "sigma_v'": -1, "sigma_v''": -1},
+    "E": {"E": 2, "C3": -1, "C3^2": -1, "sigma_v": 0, "sigma_v'": 0, "sigma_v''": 0}
+},
+{
+    "A1": {"E": 1, "C3": 1, "C3^2": 1, "sigma_v": 1, "sigma_v'": 1, "sigma_v''": 1},
+    "A2": {"E": 1, "C3": 1, "C3^2": 1, "sigma_v": -1, "sigma_v'": -1, "sigma_v''": -1},
+    "E": {"E": 2, "C3": -1, "C3^2": -1, "sigma_v": 0, "sigma_v'": 0, "sigma_v''": 0}
+}
+]
+
 
 def test_symmetry_operations():
     # Create a test point
