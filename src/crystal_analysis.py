@@ -3,6 +3,19 @@ import numpy as np
 import meep as mp
 from meep import mpb    
 
+def sort_modes(modes, key="freq"):
+    """Sort the modes by a given key.
+
+    Args:
+        modes (list): List of modes.
+        key (str, optional): Key to sort the modes by. Defaults to "freq".
+
+    Returns:
+        list: Sorted list of modes.
+    """
+
+    return sorted(modes, key=lambda x: x[key])
+
 
 def calculate_effective_parameters(E_i_avg, H_j_avg, freq, k_l):
     """Calculate effective permittivity (epsilon_eff) and permeability (mu_eff).
