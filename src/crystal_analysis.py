@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import meep as mp
 from meep import mpb    
+from photonic_crystal import suppress_output
 
 def sort_modes(modes, key="freq"):
     """Sort the modes by a given key.
@@ -15,6 +16,7 @@ def sort_modes(modes, key="freq"):
     """
 
     return sorted(modes, key=lambda x: x[key])
+
 
 
 def calculate_effective_parameters(E_i_avg, H_j_avg, freq, k_l):
@@ -172,9 +174,9 @@ def avg1D(F, resolution, periods, axis="x"):
 
     dx = dy =  1.0 / resolution
     F_edge = F[0,:] if axis == "y" else F[:,0]
-    F_integrated = np.sum(F_edge)*dx / periods if axis == "x" else np.sum(F_edge)*dy / periods
+    F_avg1D = np.sum(F_edge)*dx / periods if axis == "x" else np.sum(F_edge)*dy / periods
 
-    return F_integrated
+    return F_avg1D
 
 
 
@@ -205,24 +207,149 @@ def calculate_effective_parameters(E_i_avg, H_j_avg, freq, k_l):
     
     return epsilon_eff, mu_eff
 
-def calculate_effective_impedance(E_i_avg1d: float, H_j_avg1d: float, sgn: int):
+def calculate_effective_impedance(E_i_avg1d: float, H_j_avg1d: float):
     """
     Calculate the effective impedance of a mode.
 
     Args:
         E_i_avg1d (float): Averaged i-component of the electric field.
         H_j_avg1d (float): Averaged j-component of the magnetic field.
-        sgn (int): Sign to multiply the impedance by.
-
+        
     Returns:
         float: The effective impedance of the mode.
     """
 
-    if sgn != 1 and sgn != -1:
-        raise ValueError("Sign must be 1 or -1")
 
-    eta = sgn*np.real(E_i_avg1d)/np.real(H_j_avg1d)
+    eta = np.real(E_i_avg1d)/np.real(H_j_avg1d)
     return eta
+
+
+def extract_field_components(crystal, mode, i:int=2, j:int=1,  periods=1, verbose=False, show_plots = False):
+    ms = crystal.run_dumb_simulation()
+    md = mpb.MPBData(lattice=ms.get_lattice(), rectify = True, periods=periods)
+
+    with suppress_output():
+        E= md.convert(mode["e_field_periodic"], kpoint=mp.Vector3())
+        H= md.convert(mode["h_field_periodic"], kpoint=mp.Vector3())
+    
+    if verbose:
+        print("Shape of E after conversion: ", E.shape)
+        print("Shape of H after conversion: ", H.shape)
+
+    Ei= np.array(E[...,2])
+    Hj= np.array(H[...,1])
+    if  verbose:
+        print("Shape of Ez: ", Ei.shape)    
+        print("Shape of Hy: ", Hj.shape)
+    if show_plots:
+        if i == 0:
+            i_str = "x"
+        elif i == 1:
+            i_str = "y"
+        else:
+            i_str = "z"
+        
+        if j == 0:
+            j_str = "x"
+        elif j == 1:
+            j_str = "y"
+        else:
+            j_str = "z"
+
+        plot_field_components(Ei, Hj, f'$E_{i_str}$', f'$H_{j_str}$', title="Relevant components of the field")
+    return Ei, Hj
+    
+
+def calculate_from_mode(mode, crystal, i: int = 2, j: int = 1, k: int=0, sgn_eps = -1, sgn_mu = 1,  periods=1, verbose=False, show_plots = False):
+    if i == 0:
+        i_str = "x"
+    elif i == 1:
+        i_str = "y"
+    else:
+        i_str = "z"
+    
+    if j == 0:
+        j_str = "x"
+    elif j == 1:
+        j_str = "y"
+    else:
+        j_str = "z"
+
+    Ei, Hj = extract_field_components(crystal, mode, i, j, periods, verbose, show_plots)
+    region_I_mask = (np.real(Hj) > 0)
+    region_II_mask = (np.real(Hj) < 0)
+
+    Ei_masked_I = mask_field(Ei, region_I_mask)
+    Hj_masked_I = mask_field(Hj, region_I_mask)
+
+    if verbose:
+        print("Shape of Ei_masked_I: ", Ei_masked_I.shape)
+        print("Shape of Hj_masked_I: ", Hj_masked_I.shape)
+
+    if show_plots:
+        plot_field_components(Ei_masked_I, Hj_masked_I, f'$E_{i_str}$', f'$H_{j_str}$', vmin=-1, vmax=1, title="Region I ($H_y$ > 0)")
+
+    
+    Ei_masked_II = mask_field(Ei, region_II_mask)
+    Hj_masked_II = mask_field(Hj, region_II_mask)
+
+    if verbose:
+        print("Shape of Ei_masked_II: ", Ei_masked_II.shape)
+        print("Shape of Hj_masked_II: ", Hj_masked_II.shape)
+
+    if show_plots:
+        plot_field_components(Ei_masked_II, Hj_masked_II, f'$E_{i_str}$', f'$H_{j_str}$', vmin=-1, vmax=1, title="Region II ($H_y$ < 0)")
+
+    resolution = Ei.shape[0]
+
+    with suppress_output():
+        Ei_avg_I = avg1D(Ei_masked_I, resolution, periods)
+        Hj_avg_I = avg1D(Hj_masked_I, resolution, periods)
+
+        Ei_avg_II = avg1D(Ei_masked_II, resolution, periods)
+        Hj_avg_II = avg1D(Hj_masked_II, resolution, periods)
+    
+     
+    data = {
+        "Ei_avg_I": Ei_avg_I,
+        "Hj_avg_I": Hj_avg_I,
+        "Ei_avg_II": Ei_avg_II,
+        "Hj_avg_II": Hj_avg_II,
+        "mode": mode
+    }
+
+    if verbose:
+        print("Ei_avg_I: ", data["Ei_avg_I"])
+        print("Hj_avg_I: ", data["Hj_avg_I"])
+        print("Ei_avg_II: ", data["Ei_avg_II"])
+        print("Hj_avg_II: ", data["Hj_avg_II"])
+
+    eta_I = calculate_effective_impedance(data["Ei_avg_I"], data["Hj_avg_I"])
+    eta_II = calculate_effective_impedance(data["Ei_avg_II"], data["Hj_avg_II"])
+    eta = np.sqrt(eta_I + 0j)*np.sqrt(eta_II + 0j)
+
+    if verbose:
+        print("Effective impedance for region I: ", eta_I)
+        print("Effective impedance for region II: ", eta_II)
+        print("Effective impedance for the whole domain: ", eta)
+
+    data["eta_I"] = eta_I
+    data["eta_II"] = eta_II
+    data["eta"] = eta
+
+    eps_i = sgn_eps*data["mode"]["k_point"][k]/data["mode"]["freq"]/data["eta"]
+    mu_i = sgn_mu*data["mode"]["k_point"][k]/data["mode"]["freq"]*data["eta"]
+    data["eps_i"] = eps_i
+    data["mu_i"] = mu_i
+    data["n_eff_i"] = np.sqrt(eps_i+0j)*np.sqrt(mu_i+0j)
+                       
+
+    if verbose:
+        print("Effective permittivity: ", eps_i)
+    return data 
+    
+ 
+
 
 
 def example_analysis(): 
