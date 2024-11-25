@@ -251,6 +251,7 @@ class PhotonicCrystal:
                 "freq": ms.freqs[band-1],
                 "k_point": ms.current_k,
                 "polarization": polarization,
+                "band": band,
             }
             self.modes.append(mode)
 
@@ -298,7 +299,8 @@ class PhotonicCrystal:
                 "e_field_periodic": ms.get_efield(band, bloch_phase=False),
                 "freq": ms.freqs[band-1],
                 "k_point": ms.current_k,
-                "polarization": polarization
+                "polarization": polarization,
+                "band": band,
             }
             modes.append(mode)
         with suppress_output():
@@ -639,7 +641,7 @@ class PhotonicCrystal:
 
 
 
-    def look_for_mode(self, polarization, k_point, freq,  freq_tolerance=0.01, k_point_max_distance = None):
+    def look_for_mode(self, polarization, k_point, freq,  freq_tolerance=0.01, k_point_max_distance = None, bands = None):
         """
         Look for modes within the specified criteria.
 
@@ -649,6 +651,7 @@ class PhotonicCrystal:
             freq (float): The frequency of the mode.
             freq_tolerance (float): The tolerance for frequency similarity.
             k_point_max_distance (float, optional): The maximum distance for k-point similarity. Default is None.
+            bands (list, optional): The bands to consider. Default is None.
 
         Returns:
             list: A list of mode dictionaries that match the criteria.
@@ -663,9 +666,11 @@ class PhotonicCrystal:
             for mode in self.modes:
                 if mode["polarization"] == polarization and np.linalg.norm(np.array(mode["k_point"]) - np.array(k_point)) <= k_point_max_distance and abs(mode["freq"] - freq) <= freq_tolerance:
                     target_modes.append(mode)
+        if bands is not None:
+            target_modes = [mode for mode in target_modes if mode["band"] in bands]
         return target_modes
         
-    
+
 
     def find_modes_symmetries(self):
         """
@@ -951,7 +956,7 @@ class PhotonicCrystal:
         """
         raise NotImplementedError("calculate_effective_parameter method not implemented yet.")  
 
-    def sweep_geometry_parameter(self, param_to_sweep: str, sweep_values: list, num_bands: int =4)-> list:
+    def sweep_geometry_parameter(self,  param_to_sweep: str, sweep_values: list, runner = "run_zodd", polarization = "zodd", num_bands: int =4, bands = None)-> list:
         
         """
         Sweep a parameter of the geometry and run simulations for each value.
@@ -959,7 +964,10 @@ class PhotonicCrystal:
         Args:
             param_to_sweep (str): The parameter to sweep.
             sweep_values (list): The values to sweep.
+            runner (str, optional): The runner to use. Default is "run_zodd".
+            polarization (str, optional): The polarization of the simulation. Default is "zodd".
             num_bands (int, optional): The number of bands to calculate. Defaults to 4.
+            bands (list, optional): The bands to consider. Default is None.
         
         Returns:
             list: A list of dictionaries with the simulation data.
@@ -975,12 +983,12 @@ class PhotonicCrystal:
             self.geometry = partial_geom(**kwargs)
             self.num_bands = num_bands
             self.set_solver(k_point=mp.Vector3())
-            modes_zeven = self.run_simulation_with_output(runner="run_zeven", polarization="zeven")
-            modes_zodd  = self.run_simulation_with_output(runner="run_zodd", polarization="zodd")
+            modes= self.run_simulation_with_output(runner=runner, polarization=polarization)
+            if bands is not None:
+                modes = [mode for mode in modes if mode["band"] in bands]
             data.append({
                 'parameter_value': value,
-                'modes_zeven': modes_zeven,
-                'modes_zodd': modes_zodd,
+                'modes': modes,
                 'parameter_name': param_to_sweep,
             })
         self.geometry = old_geom
@@ -1130,12 +1138,14 @@ class PhotonicCrystal:
      
 
 
-    def plot_sweep_result(self, data, fig=None) -> go.Figure:
+    def plot_sweep_result(self, data, polarization, bands:list, color ="blue",fig=None) -> go.Figure:
         """
         Plot the sweep result using Plotly.
 
         Args:
             data (list): The data from the sweep.
+            polarization (str): The polarization of the bands.
+            bands (list): The bands to consider.
             fig (go.Figure): The Plotly figure to add the plot to.
 
         Returns:
@@ -1146,13 +1156,14 @@ class PhotonicCrystal:
             fig = go.Figure()
 
         # For each data parameter value in the x axis, add all the modes frequencies (mode["freq"])in the y axis
-        num_bands = len(data[0]['modes_zeven'])
-        for i in range(num_bands):
-            modes_zeven = [d['modes_zeven'][i] for d in data]
-            modes_zodd = [d['modes_zodd'][i] for d in data]
-            param_values = [d['parameter_value'] for d in data]   
-            fig.add_trace(go.Scatter(x=param_values, y=[m["freq"] for m in modes_zeven], mode='lines+markers', name=f'Band {i} zeven', line=dict(color='red'), marker=dict(symbol=i, size=10)))
-            fig.add_trace(go.Scatter(x=param_values, y=[m["freq"] for m in modes_zodd], mode='lines+markers', name=f'Band {i} zodd', line=dict(color='blue'), marker=dict(symbol=i, size=10)))
+
+        param_values = [d['parameter_value'] for d in data]  
+        for i, band in enumerate(bands):
+            modes = []
+            for d in data:
+                mode = [m for m in d['modes'] if m['band'] == band and m["polarization"] == polarization][0]
+                modes.append(mode)
+            fig.add_trace(go.Scatter(x=param_values, y=[m["freq"] for m in modes], mode='lines+markers', name=f'Band {band}, {modes[0]["polarization"]}', line=dict(color=color), marker=dict(symbol=i, size=10)))
         fig.update_layout(
             autosize=False,
             width=700,
@@ -1317,6 +1328,7 @@ class Crystal2D(PhotonicCrystal):
             ]
 
         self.geometry = geometry if geometry is not None else Crystal2D.basic_geometry(material = self.material)
+        self.geometry.rotate_axes(self.geometry_lattice)
         self.k_points_interpolated = mp.interpolate(interp, self.k_points)
         
 
@@ -1994,8 +2006,8 @@ class Crystal2D(PhotonicCrystal):
         """
         
         lattice = mp.Lattice(size=mp.Vector3(1, 1),
-                            basis2=mp.Vector3(1, 0),
-                            basis1=mp.Vector3(0.5, math.sqrt(3)/2))
+                            basis1=mp.Vector3(1, 0),
+                            basis2=mp.Vector3(0.5, np.sqrt(3)/2))
         
         # lattice = mp.Lattice(size=mp.Vector3(1, 1),
         #                         basis1=mp.Vector3(math.sqrt(3)/2, 0.5),
@@ -2093,6 +2105,7 @@ class CrystalSlab(PhotonicCrystal):
                 mp.Vector3(0, k_point_max, 0)       # Y
             ]
         self.geometry = geometry if geometry is not None else self.basic_geometry()
+        self.geometry.rotate_axes(self.geometry_lattice)
         self.k_points_interpolated = mp.interpolate(interp, self.k_points)
 
     def plot_epsilon(self,

@@ -3,7 +3,7 @@ import meep as mp
 from meep import mpb
 from crystal_materials import Crystal_Materials
 from functools import partial
-
+import numpy as np
 class Crystal_Geometry:
 
     """
@@ -24,11 +24,13 @@ class Crystal_Geometry:
 
     def __init__(self, 
                  material : Crystal_Materials,
-                 geometry_type: str = 'circular'
+                 geometry_type: str = 'circular',
+                 biatomic_geometry: bool = False, 
                  ):
         self.required_arguments = {
             "material": material,
             "geometry_type": geometry_type,
+            "biatomic_geometry": biatomic_geometry
         }
         self.kwargs = {}
         self.arguments = {**self.required_arguments, **self.kwargs}
@@ -36,6 +38,7 @@ class Crystal_Geometry:
         self.geometry =[]
         self.base_geometry = self.geometry
         self.geometry_type = geometry_type
+        self.biatomic_geometry = biatomic_geometry
         
         self.atomic_function = None
 
@@ -52,7 +55,10 @@ class Crystal_Geometry:
             NotImplementedError: If the method is not yet implemented.
         '''
         raise NotImplementedError("This method is not yet implemented")
-        
+
+    def square_biatomic(self, l1, l2, lat):
+        raise NotImplementedError("This method is not yet implemented")
+
 
     def circular_atom(self, r):
         '''
@@ -65,6 +71,10 @@ class Crystal_Geometry:
             NotImplementedError: If the method is not yet implemented.
         '''
         raise NotImplementedError("This method is not yet implemented")
+    
+    def circular_biatomic(self, r1, r2, lat):
+        raise NotImplementedError("This method is not yet implemented")
+
         
     def rectangular_atom(self, a, b):
         '''
@@ -79,6 +89,9 @@ class Crystal_Geometry:
         '''
         raise NotImplementedError("This method is not yet implemented")
     
+    def rectangular_biatomic(self, a1, b1, a2, b2, lat): 
+        raise NotImplementedError("This method is not yet implemented")
+    
     def elliptical_atom(self, a, b):
         '''
         Adds an elliptical atom to the geometry.
@@ -91,6 +104,11 @@ class Crystal_Geometry:
             NotImplementedError: If the method is not yet implemented.
         '''
         raise NotImplementedError("This method is not yet implemented")
+    
+    def elliptical_biatomic(self, a1, b1, a2, b2, lat):
+        raise NotImplementedError("This method is not yet implemented")
+    
+
     
     def build_geometry(self):
         """
@@ -141,6 +159,25 @@ class Crystal_Geometry:
         for key in exclude_keys:
             arguments.pop(key, None)  # Use pop with default to avoid KeyError
         return partial(self.__class__, **arguments)
+
+    def rotate_axes(self, lat):
+        """
+        Rotates the crystal geometry to align with x and y axes.
+
+        Args:
+            angle (float): Angle of rotation in radians.
+
+        Returns:
+            None
+        """
+        x_dir = mp.Vector3(1, 0, 0)
+        y_dir = mp.Vector3(0, 1, 0)
+        for obj in self.geometry:
+            if isinstance(obj, mp.Block):
+                obj.e2 = mp.cartesian_to_lattice(x_dir, lat)
+                obj.e1 = mp.cartesian_to_lattice(y_dir, lat)
+                pass
+
         
 
         
@@ -157,6 +194,7 @@ class Crystal2D_Geometry(Crystal_Geometry):
     def __init__(self,
                  material: Crystal_Materials,
                  geometry_type: str ='circular',
+                 biatomic_geometry: bool = False,
                  **kwargs
                  ):
         """
@@ -186,11 +224,12 @@ class Crystal2D_Geometry(Crystal_Geometry):
             ValueError: If an invalid `geometry_type` is provided.
         """
 
-        super().__init__(material, geometry_type)
+        super().__init__(material, geometry_type, biatomic_geometry)
         self.required_arguments = {
             "material": material,
             "geometry_type": geometry_type,
-        }
+            "biatomic_geometry": biatomic_geometry,
+            }
         self.kwargs = kwargs
         self.arguments = {**self.required_arguments, **self.kwargs}
         
@@ -202,18 +241,31 @@ class Crystal2D_Geometry(Crystal_Geometry):
                 material=self.material.bulk),
         )
         self.base_geometry = self.geometry
-        
-        if self.geometry_type == 'circular':
-            self.atomic_function = self.circular_atom  
-        elif self.geometry_type == 'square':
-            self.atomic_function = self.square_atom
-        elif self.geometry_type == 'rectangular':
-            self.atomic_function = self.rectangular_atom
-        elif self.geometry_type == 'elliptical':
-            self.atomic_function = self.elliptical_atom
+        if self.biatomic_geometry is False:
+            if self.geometry_type == 'circular':
+                self.atomic_function = self.circular_atom  
+            elif self.geometry_type == 'square':
+                self.atomic_function = self.square_atom
+            elif self.geometry_type == 'rectangular':
+                self.atomic_function = self.rectangular_atom
+            elif self.geometry_type == 'elliptical':
+                self.atomic_function = self.elliptical_atom
+            else:
+                raise ValueError(f"Invalid geometry type: {self.geometry_type}")
+            self.atomic_function(**kwargs)
         else:
-            raise ValueError(f"Invalid geometry type: {self.geometry_type}")
-        self.atomic_function(**kwargs)
+            if self.geometry_type == 'circular':
+                self.atomic_function = self.circular_biatomic
+            elif self.geometry_type == 'square':
+                self.atomic_function = self.square_biatomic
+            elif self.geometry_type == 'rectangular':
+                self.atomic_function = self.rectangular_biatomic
+            elif self.geometry_type == 'elliptical':
+                self.atomic_function = self.elliptical_biatomic
+            else:
+                raise ValueError(f"Invalid geometry type: {self.geometry_type}")
+            self.atomic_function(**kwargs)
+
                  
 
     def circular_atom(self, r: float = 0.2, center: mp.Vector3 = mp.Vector3(0,0)):
@@ -233,6 +285,34 @@ class Crystal2D_Geometry(Crystal_Geometry):
                                         radius=r,
                                         ))
         
+    def circular_biatomic(self, r1:float=0.2, r2:float=0.35, lat:str = "square"):
+        if lat == "square":
+            self.geometry.append(mp.Cylinder(
+                                        material=self.material.atom, 
+                                        center = mp.Vector3(0.25,0.25),
+                                        radius=r1,
+                                        ))
+            self.geometry.append(mp.Cylinder(
+                                        material=self.material.atom, 
+                                        center = mp.Vector3(-0.25,-0.25),
+                                        radius=r2,
+                                        ))
+        elif lat == "triangular": 
+            self.geometry.append(mp.Cylinder(
+                                        material=self.material.atom, 
+                                        center = mp.Vector3(1/3,1/3),
+                                        radius=r1,
+                                        ))
+            self.geometry.append(mp.Cylinder(
+                                        material=self.material.atom, 
+                                        center = mp.Vector3(2/3,2/3),
+                                        radius=r2,
+                                        ))
+        else:
+            raise ValueError(f"Invalid lattice type: {lat}")
+                      
+        
+        
     def square_atom(self, l: float = 0.5, center: mp.Vector3 = mp.Vector3(0,0)):
         """
         Adds a square atom to the geometry.
@@ -248,7 +328,26 @@ class Crystal2D_Geometry(Crystal_Geometry):
         self.geometry.append(mp.Block(size = mp.Vector3(l, l, 0),
                                         material=self.material.atom, 
                                         center = center))
-    
+        
+    def square_biatomic(self, l1: float = 0.5, l2: float = 0.6, lat: str = "square"):
+        if lat == "square":
+            self.geometry.append(mp.Block(size = mp.Vector3(l1, l1, 0),
+                                        material=self.material.atom, 
+                                        center = mp.Vector3(0.25,0.25)))
+            self.geometry.append(mp.Block(size = mp.Vector3(l2, l2, 0),
+                                        material=self.material.atom, 
+                                        center = mp.Vector3(-0.25,-0.25)))
+        elif lat == "triangular":
+            self.geometry.append(mp.Block(size = mp.Vector3(l1, l1, 0),
+                                        material=self.material.atom, 
+                                        center = mp.Vector3(1/3,1/3)))
+            self.geometry.append(mp.Block(size = mp.Vector3(l2, l2, 0),
+                                        material=self.material.atom, 
+                                        center = mp.Vector3(2/3,2/3)))
+        else:
+            raise ValueError(f"Invalid lattice type: {lat}")
+        
+        
     def rectangular_atom(self, a: float = 0.2, b : float = 0.5, center: mp.Vector3 = mp.Vector3(0,0)):
         """
         Adds a rectangular atom to the geometry.
@@ -265,6 +364,28 @@ class Crystal2D_Geometry(Crystal_Geometry):
                             size=mp.Vector3(a, b, 0),
                             material=self.material.atom, 
                             center = center))
+        
+    def rectangular_biatomic(self, a1: float = 0.3, b1: float = 0.2, a2: float = 0.2, b2: float = 0.3, lat="square"):
+        if lat == "square":
+            self.geometry.append(mp.Block(
+                            size=mp.Vector3(a1, b1, 0),
+                            material=self.material.atom, 
+                            center = mp.Vector3(0.25,0.25)))
+            self.geometry.append(mp.Block(
+                            size=mp.Vector3(a2, b2, 0),
+                            material=self.material.atom, 
+                            center = mp.Vector3(-0.25,-0.25)))
+        elif lat == "triangular":
+            self.geometry.append(mp.Block(
+                            size=mp.Vector3(a1, b1, 0),
+                            material=self.material.atom, 
+                            center = mp.Vector3(1/3,1/3)))
+            self.geometry.append(mp.Block(
+                            size=mp.Vector3(a2, b2, 0),
+                            material=self.material.atom, 
+                            center = mp.Vector3(2/3,2/3)))
+        else:
+            raise ValueError(f"Invalid lattice type: {lat}")
     
     def elliptical_atom(self, a : float = 0.2, b : float = 0.5, center: mp.Vector3 = mp.Vector3(0,0), e1 = mp.Vector3(1,0), e2 = mp.Vector3(0,1)):
         """
@@ -284,10 +405,32 @@ class Crystal2D_Geometry(Crystal_Geometry):
                                       center = center,
         ))
 
-        
+    def elliptical_biatomic(self, a1: float = 0.3, b1: float = 0.6, a2: float = 0.6, b2: float = 0.3, lat = "square"):
+        if lat == "square":
+            self.geometry.append(mp.Ellipsoid(
+                                      size = mp.Vector3(a1, b1, mp.inf),
+                                      material=self.material.atom, 
+                                      center = mp.Vector3(0.25,0.25),
+            ))
+            self.geometry.append(mp.Ellipsoid(
+                                      size = mp.Vector3(a2, b2, mp.inf),
+                                      material=self.material.atom, 
+                                      center = mp.Vector3(-0.25,-0.25),
+            ))
+        elif lat == "triangular":
+            self.geometry.append(mp.Ellipsoid(
+                                      size = mp.Vector3(a1, b1, mp.inf),
+                                      material=self.material.atom, 
+                                      center = mp.Vector3(1/3,1/3),
+            ))
+            self.geometry.append(mp.Ellipsoid(
+                                      size = mp.Vector3(a2, b2, mp.inf),
+                                      material=self.material.atom, 
+                                      center = mp.Vector3(2/3,2/3),
+            ))
+        else:
+            raise ValueError(f"Invalid lattice type: {lat}")
 
-
-    
 
 class CrystalSlab_Geometry(Crystal_Geometry):
     """
@@ -471,6 +614,7 @@ class CrystalSlab_Geometry(Crystal_Geometry):
 
 if __name__ == '__main__':
     # %%
+    import meep as mp
     from crystal_materials import Crystal_Materials
     from crystal_geometries import Crystal2D_Geometry, CrystalSlab_Geometry
     from photonic_crystal import PhotonicCrystal, Crystal2D, CrystalSlab
@@ -484,18 +628,22 @@ if __name__ == '__main__':
 
     # Simulation parameters
     num_bands = 8
-    resolution = 32
+    resolution = 64
     interp = 3
-    periods = 1
-    lattice_type = 'square'
+    periods = 3
+    lattice_type = 'triangular'
     pickle_id = 'square'
 
     # Create geometry
     geometry = Crystal2D_Geometry(
         material,
-        geometry_type='elliptical',
-        a=0.5, 
-        b=0.2,
+        geometry_type='rectangular',
+        biatomic_geometry=True,
+        lat = "triangular",
+        a1 =0.1,
+        a2=0.3,
+        b1= 0.3, 
+        b2 = 0.1
 
     )
     
@@ -511,16 +659,26 @@ if __name__ == '__main__':
         k_point_max=0.5,
         use_XY=True
     )
+
+    
     crystal_2d.run_dumb_simulation()
 
     # Plot and display epsilon distribution
     fig = crystal_2d.plot_epsilon()
+    fig.update_layout(
+        width=600,
+        height=600,
+        autosize=False,
+        xaxis=dict(scaleanchor="y", scaleratio=1),
+        yaxis=dict(scaleanchor="x", scaleratio=1)
+    )
     fig.show()
+    
 
     print(geometry.kwargs)
     print(vars(geometry))
 
-    partial_geometry = geometry.to_partial(exclude_key='a')
+    partial_geometry = geometry.to_partial(exclude_keys='r1')
     print(partial_geometry().kwargs)
 
 

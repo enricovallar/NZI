@@ -346,6 +346,8 @@ def calculate_from_mode(mode, crystal, i: int = 2, j: int = 1, k: int=0, sgn_eps
 
     if verbose:
         print("Effective permittivity: ", eps_i)
+        print("Effective permeability: ", mu_i)
+        print("Effective index: ", data["n_eff_i"])
     return data 
     
  
